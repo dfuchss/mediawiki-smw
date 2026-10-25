@@ -6,7 +6,7 @@
 #
 # Usage:   scripts/update.sh <name> [options]
 #   --tag <tag>      target tag instead of asking (default: the floating tag of origin/main, e.g.
-#                    1.46-smw7.3; an immutable tag such as 1.46.2-smw7.3.1-r4.2 pins that build)
+#                    1.46-smw7.3; an immutable tag such as 1.46.2-smw7.3.1-42 pins that build)
 #   --yes            no questions: default target tag, git pull when behind, backup, continue
 #   --no-backup      skip the backup (refused for a version-line change unless --force)
 #   --force          allow --no-backup for a version-line change
@@ -27,7 +27,7 @@
 # Exit:    0 when the wiki runs healthy on the target tag (a failed smoke test only warns); 1 when
 #          refused or aborted before anything changed, or when a step fails (rollback steps printed)
 # Example: scripts/update.sh team                      # interactive, Enter accepts every default
-#          scripts/update.sh team --tag 1.46.2-smw7.3.1-r4.2 --yes   # pin an immutable build
+#          scripts/update.sh team --tag 1.46.2-smw7.3.1-42 --yes   # pin an immutable build
 . "$(dirname "$0")/lib.sh"
 
 # Bounded wait for the wiki to become healthy (update.php of a version-line change can take a while)
@@ -73,7 +73,7 @@ floating_tag_of_dockerfile() {
 }
 
 # Prints the version line of tag $1, "<MW major.minor>-smw<SMW major.minor>": 1.46-smw7.3 for both
-# 1.46-smw7.3 and 1.46.2-smw7.3.1-r4.2. Tags of another form (e.g. "1.46") print themselves.
+# 1.46-smw7.3 and 1.46.2-smw7.3.1-42. Tags of another form (e.g. "1.46") print themselves.
 version_line_of_tag() {
   local tag="$1" mw_part smw_part
   if [[ "$tag" =~ ^([0-9]+\.[0-9]+)(\.[0-9]+)?-smw([0-9]+\.[0-9]+) ]]; then

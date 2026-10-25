@@ -1,6 +1,6 @@
 # Builds the wiki image for amd64 and arm64, smoke-tests the amd64 image (new-wiki.sh: install + smoke.sh)
 # and only then publishes it to GHCR as ghcr.io/<owner>/<repo>:
-#   <MW>-smw<SMW>-r<IMAGE_REVISION>.<run number>[.<attempt>]   immutable (pin it to roll back)
+#   <MW>-smw<SMW>-<run number>[.<attempt>]   immutable (pin it to roll back), e.g. 1.46.2-smw7.3.1-42
 #   <MW minor>-smw<SMW minor>, <MW minor>                      floating (Watchtower follows the first)
 # A re-run gets its own immutable tag (".<attempt>" from the second attempt on), and the merge job
 # refuses to push when the immutable tag already exists: a published one is never overwritten.
@@ -63,7 +63,8 @@ jobs:
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
           build_id="$GITHUB_RUN_NUMBER"
           if [ "$GITHUB_RUN_ATTEMPT" -gt 1 ]; then build_id="$build_id.$GITHUB_RUN_ATTEMPT"; fi
-          version="$mw-smw$smw-r$rev.$build_id"
+          # The run number is unique and increasing; IMAGE_REVISION only matters inside the image (recipe)
+          version="$mw-smw$smw-$build_id"
           floating="${mw%.*}-smw${smw%.*}"
           # new-wiki.sh's default tag must be the one this workflow publishes (update.sh derives it
           # from the Dockerfile the same way)

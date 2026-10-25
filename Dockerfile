@@ -19,8 +19,8 @@ ARG CODEMIRROR_SHA=587cc3fa0fe2d0a9ef25f1ab2e3c1ee4f27fac79
 # Roboto webfont (self-hosted, see the font step below); bump version and checksum together
 ARG ROBOTO_VERSION=5.3.0
 ARG ROBOTO_SHA256=77620f437249772e381698224ea1bddd01c985ecd60267a63ddc96b9eb9348f7
-# Bump for image changes the versions above do not show (PHP settings, entrypoint, ...). It is the
-# r<N> in the image tag and part of the recipe below, so the entrypoint runs update.php once.
+# Bump for image changes the versions above do not show (PHP settings, entrypoint, ...). It is part
+# of the recipe below, so the entrypoint runs update.php once (the image tag uses the CI build number).
 ARG IMAGE_REVISION=6
 
 # python3: SyntaxHighlight; GMP: fast big-number math for OATHAuth (WebAuthn/passkeys).
