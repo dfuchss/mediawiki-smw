@@ -5,7 +5,9 @@
 # Interactive by default: asks for every value, with the default in [brackets] (Enter accepts it).
 # Options (each one answers its question; with --yes the rest take their defaults):
 #   --name <name>          folder and compose project name: lowercase letters, digits, dashes
-#   --port <port>          local port (default: the next free one from 8080, see suggest_port)
+#   --port <port>          port on this machine the wiki is published on, http://127.0.0.1:<port>
+#                          (WIKI_PORT; default: the next free one from 8081, see suggest_port). Only
+#                          for direct access; behind Traefik the compose file publishes no port.
 #   --server <url>         public URL, WIKI_SERVER (default: http://localhost:<port>)
 #   --site-name <text>     site name (default: Wiki)
 #   --admin-user <name>    first administrator (default: Admin)
@@ -16,8 +18,10 @@
 #   --font <font>          roboto or default (default: roboto)
 #   --storage <mode>       volumes (Docker named volumes, default) or folders (bind mounts to
 #                          wikis/<name>/data/db, images and state)
-#   --image <image:tag>    default from templates/wiki.env (mediawiki-smw:1.46-smw7.3, built from this
-#                          repository); ghcr.io/<owner>/<repo>:<tag> is pulled instead
+#   --image <image:tag>    default: the image the GitHub Actions workflow publishes for this clone,
+#                          ghcr.io/<owner>/<repo>:<tag> from the origin remote (see default_image), which
+#                          is pulled; a plain name such as mediawiki-smw:1.46-smw7.3 is built from this
+#                          repository instead (also the default when origin is not on GitHub)
 #   --install | --no-install   install now or only write the files (default: install)
 #   --refresh-image        pull or rebuild the image even if it exists locally
 #   --yes                  non-interactive: no questions, defaults for everything not given
@@ -41,7 +45,7 @@
 . "$(dirname "$0")/lib.sh"
 
 TEMPLATES_DIR="$REPO_ROOT/templates"
-FIRST_PORT=8080
+FIRST_PORT=8081
 LAST_PORT=8999
 
 # Prints the help (the header of this file) and exits with $1.
@@ -245,12 +249,22 @@ choose_admin_password() {
 
 # ---- files -----------------------------------------------------------------------------------------
 
-# Prints the default image reference (WIKI_IMAGE:WIKI_TAG) from templates/wiki.env.
+# Prints the default image reference. When this clone's origin remote is on GitHub, that is the image
+# the workflow publishes: ghcr.io/<owner>/<repo> (lowercase, as GHCR requires) with the floating tag
+# from templates/wiki.env. Otherwise the local build name from templates/wiki.env.
 default_image() {
-  local template_image template_tag
+  local template_image template_tag origin_url owner_and_repo
   template_image="$(sed -n 's/^WIKI_IMAGE=//p' "$TEMPLATES_DIR/wiki.env")"
   template_tag="$(sed -n 's/^WIKI_TAG=//p' "$TEMPLATES_DIR/wiki.env")"
-  echo "$template_image:$template_tag"
+  origin_url="$(git -C "$REPO_ROOT" remote get-url origin 2> /dev/null || true)"
+  # git@github.com:owner/repo.git, https://github.com/owner/repo(.git), ssh://git@github.com/owner/repo
+  owner_and_repo="$(printf '%s\n' "$origin_url" | sed -n 's#^.*github\.com[:/]\([^/]*/[^/]*\)$#\1#p')"
+  owner_and_repo="${owner_and_repo%.git}"
+  if [ -n "$owner_and_repo" ]; then
+    echo "ghcr.io/$(printf '%s' "$owner_and_repo" | tr '[:upper:]' '[:lower:]'):$template_tag"
+  else
+    echo "$template_image:$template_tag"
+  fi
 }
 
 # Writes the compose file $2 from the template $1 for the data storage $3 (volumes or folders). The
@@ -376,7 +390,7 @@ command -v openssl > /dev/null || die "openssl is needed to generate the secrets
 [ "$assume_yes" = 1 ] || echo "New wiki. Enter accepts the default in [brackets]; Ctrl-C aborts (nothing is written before the summary)." >&2
 ask wiki_name "Wiki name (folder wikis/<name>, compose project)" "" validate_name "$opt_name"
 suggested_port="$(suggest_port)" || die "No free port between $FIRST_PORT and $LAST_PORT"
-ask wiki_port "Local port" "$suggested_port" validate_port "$opt_port"
+ask wiki_port "Port on this machine (wiki at http://127.0.0.1:<port>; not used behind Traefik)" "$suggested_port" validate_port "$opt_port"
 ask wiki_server "Public URL (WIKI_SERVER)" "http://localhost:$wiki_port" validate_url "$opt_server"
 ask site_name "Site name" "Wiki" validate_text "$opt_site_name"
 ask admin_user "Admin user name" "Admin" validate_admin_user "$opt_admin_user"
@@ -386,7 +400,7 @@ ask wiki_timezone "Time zone" "UTC" validate_timezone "$opt_timezone"
 ask date_format "Date format (dmy, mdy, ymd, ISO 8601)" "dmy" validate_date_format "$opt_date_format"
 ask default_theme "Default theme (os, day, night)" "os" validate_theme "$opt_theme"
 ask wiki_font "Font (roboto, default)" "roboto" validate_font "$opt_font"
-ask image_ref "Image (a plain name is built from this repository; ghcr.io/... is pulled)" "$(default_image)" validate_image "$opt_image"
+ask image_ref "Image (ghcr.io/... is pulled; a plain name such as mediawiki-smw:<tag> is built from this repository)" "$(default_image)" validate_image "$opt_image"
 ask storage_mode "Data storage: volumes (Docker-managed) or folders (wikis/$wiki_name/data/...)" "volumes" validate_storage "$opt_storage"
 
 # Split at the last ":" (the tag; validate_image made sure it comes after the last "/")

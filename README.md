@@ -33,7 +33,7 @@ Clone the repository once per machine. Wikis and backups live inside the clone a
 
     scripts/new-wiki.sh
 
-It asks for the name, the local port (the next free one from 8080), the public URL, site name, admin user and password (generated unless you type one), language, time zone, date format, default theme, font, image and data storage, with defaults in brackets. It generates all secrets with `openssl rand`, writes the folder above, shows a summary and asks whether to install now: get the image (a plain name such as `mediawiki-smw` is built from this repository, `ghcr.io/...` is pulled), install, start, wait until healthy, and run the smoke test.
+It asks for the name, the port on this machine the wiki is published on (`http://127.0.0.1:<port>`, the next free one from 8081, since 8080 is often taken; only for direct access, not used behind Traefik), the public URL, site name, admin user and password (generated unless you type one), language, time zone, date format, default theme, font, image and data storage, with defaults in brackets. It generates all secrets with `openssl rand`, writes the folder above, shows a summary and asks whether to install now: get the image (the default is the image this repository's workflow publishes, `ghcr.io/<owner>/<repo>:1.46-smw7.3` derived from the clone's GitHub `origin`, which is pulled; a plain name such as `mediawiki-smw:1.46-smw7.3` is built from this repository instead and is also the default when `origin` is not on GitHub), install, start, wait until healthy, and run the smoke test.
 
 Non-interactive (CI, scripts): every answer has an option, `--yes` takes defaults for the rest, and the admin password comes from `ADMIN_PASSWORD` in the environment or is generated:
 
