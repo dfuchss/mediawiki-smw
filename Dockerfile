@@ -12,8 +12,8 @@ ARG SRF_VERSION=6.0.0
 # an SMW API that SMW 7 removed ("Fix support for SMW 7" is in 6.0.11). The others follow REL1_46.
 # renovate: datasource=git-tags depName=PageForms packageName=https://github.com/wikimedia/mediawiki-extensions-PageForms version=6.0.11
 ARG PAGEFORMS_SHA=88ad8f1805a11bb1c693ddd9e5311b059593344f
-# renovate: datasource=git-refs depName=HeaderTabs packageName=https://github.com/wikimedia/mediawiki-extensions-HeaderTabs branch=REL1_46
-ARG HEADERTABS_SHA=26298a7464d1c13d015701e32db73d80af0a9242
+# renovate: datasource=git-refs depName=HeaderTabs packageName=https://github.com/wikimedia/mediawiki-extensions-HeaderTabs branch=1.3
+ARG HEADERTABS_SHA=2ba26f649e3a66d6fac6f4d620095043665b56ef
 # renovate: datasource=git-refs depName=CodeMirror packageName=https://github.com/wikimedia/mediawiki-extensions-CodeMirror branch=REL1_46
 ARG CODEMIRROR_SHA=587cc3fa0fe2d0a9ef25f1ab2e3c1ee4f27fac79
 # Roboto webfont (self-hosted, see the font step below); bump version and checksum together
