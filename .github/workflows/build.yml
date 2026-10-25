@@ -157,7 +157,7 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: mkdir -p /tmp/digests && touch "/tmp/digests/${DIGEST#sha256:}"
       - if: needs.prepare.outputs.push == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digest-${{ matrix.runner }}
           path: /tmp/digests/*
@@ -212,7 +212,7 @@ jobs:
     permissions:
       packages: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: digest-*
           path: /tmp/digests
