@@ -34,6 +34,13 @@ because it still needs these steps:
 3. Logos and icons into `branding/`, extra MediaWiki settings into `settings.php`.
 4. Start it: `cd wikis/@NAME@ && docker compose up -d` (or `scripts/compose.sh @NAME@ up -d`).
 
+## Updating
+
+Patch updates arrive automatically when Watchtower runs: it follows the floating `WIKI_TAG`. For a new
+version line (MediaWiki or SMW minor), a manual refresh or a rollback to an immutable tag, run
+`scripts/update.sh @NAME@` from the repository root: it backs up, pulls, sets `WIKI_TAG` in `.env`,
+starts the wiki and checks it, and prints the rollback steps if anything fails.
+
 ## Afterwards
 
 Keep `WIKI_OATH_KEY` and `WIKI_SECRET_KEY` when moving the wiki (backup and restore), and run

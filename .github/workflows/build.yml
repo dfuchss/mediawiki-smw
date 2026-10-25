@@ -65,6 +65,10 @@ jobs:
           if [ "$GITHUB_RUN_ATTEMPT" -gt 1 ]; then build_id="$build_id.$GITHUB_RUN_ATTEMPT"; fi
           version="$mw-smw$smw-r$rev.$build_id"
           floating="${mw%.*}-smw${smw%.*}"
+          # new-wiki.sh's default tag must be the one this workflow publishes (update.sh derives it
+          # from the Dockerfile the same way)
+          template_tag="$(sed -n 's/^WIKI_TAG=//p' templates/wiki.env)"
+          [ "$template_tag" = "$floating" ] || { echo "::error::templates/wiki.env WIKI_TAG=$template_tag, but the Dockerfile publishes $floating"; exit 1; }
           base_digest="$(docker buildx imagetools inspect "mediawiki:$mw" --format '{{json .Manifest}}' | jq -r .digest)"
           recipe_sha="$(git ls-files -z Dockerfile docker config | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)"
           {

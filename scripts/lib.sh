@@ -22,8 +22,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WIKIS_DIR="$REPO_ROOT/wikis"
 # shellcheck disable=SC2034  # used by the scripts that source this file
 BACKUPS_DIR="$REPO_ROOT/backups"
-# Settings a wiki cannot run without (compose.yaml would stop with a less helpful message)
-REQUIRED_SETTINGS="COMPOSE_PROJECT_NAME WIKI_SERVER WIKI_IMAGE WIKI_TAG WIKI_PORT DB_PASSWORD DB_ROOT_PASSWORD WIKI_SECRET_KEY WIKI_UPGRADE_KEY"
+# Settings a wiki cannot run without (compose.yaml would stop with a less helpful message). Not
+# WIKI_PORT: behind Traefik the `ports:` mapping is commented out and the port is unused.
+REQUIRED_SETTINGS="COMPOSE_PROJECT_NAME WIKI_SERVER WIKI_IMAGE WIKI_TAG DB_PASSWORD DB_ROOT_PASSWORD WIKI_SECRET_KEY WIKI_UPGRADE_KEY"
 
 # Prints its arguments to stderr and exits 1.
 die() { echo "$*" >&2; exit 1; }

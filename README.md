@@ -65,7 +65,8 @@ All take the wiki name first.
 | `scripts/smoke.sh <name>` | Diagnostic, read-only: login page, private API, admin login, SMW. Runs curl inside the wiki container, so it needs no Traefik, DNS, TLS or published port (and does not test the public route); every request has a timeout, the wait for the wiki at most 2 minutes |
 | `scripts/backup.sh <name>` | `backups/<name>/wiki-<timestamp>.tar.gz` |
 | `scripts/restore.sh <name> [--yes] <archive>` | Replace database and uploads from a backup |
-| `scripts/list-wikis.sh` | Name, URL, port, storage mode and state of all wikis |
+| `scripts/update.sh <name> [--tag <tag>] [--yes]` | Update to the version on `main` (or any tag): backup, pull, start, health and smoke check |
+| `scripts/list-wikis.sh` | Name, URL, published port (`-` behind Traefik), storage mode and state of all wikis |
 
 The scripts stop with a clear message when a required setting is missing, run with `umask 077`, never put passwords on command lines, and start one-off containers with `traefik.enable=false` so Traefik never routes to them.
 
@@ -87,13 +88,14 @@ On the server, either clone the repository and create the wiki there with `new-w
 4. `.env`: `WIKI_IMAGE=ghcr.io/<owner>/<repo>` with the floating `WIKI_TAG=1.46-smw7.3`.
 5. `docker compose pull && docker compose up -d`, then schedule `scripts/backup.sh <name>` nightly with off-site copies.
 
-## Updates
+## Updating
 
 - The CI workflow (`.github/workflows/build.yml`) builds amd64 and arm64 images, creates two throwaway wikis with `new-wiki.sh --yes` (Docker volumes and data folders), installs and smoke-tests them, and only then publishes `ghcr.io/<owner>/<repo>` with three tags: immutable `<MW>-smw<SMW>-r<REV>.<run>` (`.<attempt>` on re-runs; an existing immutable tag is never overwritten), floating `<MW minor>-smw<SMW minor>` and `<MW minor>`. A weekly run publishes only when the base image or the recipe (`Dockerfile`, `docker/`, `config/`) changed. Pull requests are built and smoke-tested, never published.
 - Watchtower (e.g. the maintained `nickfedor/watchtower` fork) follows the floating tag. On start, the entrypoint compares the image recipe plus a hash of the configuration with the stamp in `wiki-state` (volume or `data/state`) and runs `update.php` once when they differ; a plain restart skips it. Watch for `[entrypoint] update.php done` in `docker compose logs wiki`.
 - Renovate (`renovate.json`) bumps the versions pinned in the `Dockerfile`. MediaWiki patch releases and extension commits on the release branch are automerged once build and smoke passed (patch releases also need to be 3 days old); SMW/SRF and PageForms updates stay manual.
-- Manual update (new SMW minor, new MediaWiki branch): back up, set `WIKI_TAG`, `docker compose pull && docker compose up -d`.
-- Rollback: pin the previous immutable tag in `WIKI_TAG` and `docker compose up -d` (Watchtower leaves pinned tags alone). If the newer version changed the schema, restore the backup taken before the update.
+- Patch updates are automatic: Watchtower pulls the newest build of the floating `WIKI_TAG` (e.g. `1.46-smw7.3`) and restarts the wiki.
+- `scripts/update.sh <name>` for version-line changes (new SMW minor, new MediaWiki branch) and manual refreshes. It offers the version the `main` branch publishes (the floating tag derived from the `Dockerfile` on `origin/main`, as CI does; it offers `git pull --ff-only` first when the clone is behind), accepts any other tag, checks that the tag exists in the registry, warns about schema migrations on a version-line change, backs up with `backup.sh` (mandatory for a version-line change unless `--no-backup --force`), pulls, sets `WIKI_TAG` in `.env` (only that line), starts the wiki, waits until it is healthy, shows the entrypoint's `update.php` lines and runs the smoke test (warning only). Afterwards Watchtower follows the new floating tag; an immutable tag holds that build. Non-interactive: `--tag <tag> --yes`. For a plain local image name it rebuilds from the checkout.
+- Rollback: `scripts/update.sh <name> --tag <previous immutable tag>` (or set `WIKI_TAG` and `docker compose up -d`). If the newer version changed the schema, restore the backup taken before the update (`update.sh` prints the exact commands when a step fails).
 
 ## Backup and restore
 
