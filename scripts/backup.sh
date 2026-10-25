@@ -2,7 +2,8 @@
 # Backup of a wiki: database dump and all uploads (originals, old versions, deleted files, thumbnails).
 #
 # Usage:   scripts/backup.sh <name>
-# Reads:   the running db container (mysqldump) and the volume <name>_images
+# Reads:   the running db container (mysqldump) and the uploads (volume <name>_images or folder
+#          data/images), through containers, so both storage modes work the same
 # Writes:  backups/<name>/wiki-<YYYYmmdd-HHMMSS>.tar.gz with db.sql and images.tar, mode 600; prints
 #          its path. Written as *.partial and renamed only when complete, so a failed run leaves no
 #          truncated archive under a valid name.

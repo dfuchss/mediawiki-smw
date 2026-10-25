@@ -21,7 +21,7 @@ ARG ROBOTO_VERSION=5.3.0
 ARG ROBOTO_SHA256=77620f437249772e381698224ea1bddd01c985ecd60267a63ddc96b9eb9348f7
 # Bump for image changes the versions above do not show (PHP settings, entrypoint, ...). It is the
 # r<N> in the image tag and part of the recipe below, so the entrypoint runs update.php once.
-ARG IMAGE_REVISION=3
+ARG IMAGE_REVISION=4
 
 # python3: SyntaxHighlight; GMP: fast big-number math for OATHAuth (WebAuthn/passkeys).
 # Composer extensions (exact versions): `composer update` re-resolves the whole vendor/ directory, so

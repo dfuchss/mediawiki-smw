@@ -4,7 +4,8 @@
 #
 # Usage:   scripts/install.sh <name>
 # Reads:   wikis/<name>/.env (ADMIN_USER, ADMIN_PASSWORD and the wiki settings)
-# Writes:  the volumes <name>_db-data and <name>_wiki-state (update stamp); starts both containers
+# Writes:  the database and the update stamp (volumes <name>_db-data and <name>_wiki-state, or the
+#          folders data/db and data/state); starts both containers
 # Exit:    0 when the wiki is installed and healthy; non-zero when any step fails (the installer
 #          refuses to run on a database that is already installed)
 # Example: scripts/install.sh demo

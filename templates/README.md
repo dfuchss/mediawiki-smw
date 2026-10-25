@@ -9,6 +9,9 @@ wiki is in this folder:
 | `compose.yaml` | Both containers (`db`, `wiki`); yours to edit, never changed by stack updates |
 | `branding/` | Optional: `wordmark.svg`, `icon.svg`, `favicon.svg`/`.png`/`.ico`, `apple-touch-icon.png`, `branding.css` |
 | `settings.php` | Optional extra MediaWiki settings, included last (must exist, may stay empty) |
+| `data/` | Only with the folders storage: `db`, `images`, `state` (see below) |
+
+@STORAGE@
 
 Logos and icons go into `branding/` (served without login), never as wiki uploads in `$wgLogos` or
 `$wgFavicon`: uploads need a login and would be missing on the login page.

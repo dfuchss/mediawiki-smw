@@ -14,6 +14,8 @@
 #   --date-format <fmt>    dmy, mdy, ymd or "ISO 8601" (default: dmy)
 #   --theme <theme>        os, day or night (default: os)
 #   --font <font>          roboto or default (default: roboto)
+#   --storage <mode>       volumes (Docker named volumes, default) or folders (bind mounts to
+#                          wikis/<name>/data/db, images and state)
 #   --image <image:tag>    default from templates/wiki.env (mediawiki-smw:1.46-smw7.3, built from this
 #                          repository); ghcr.io/<owner>/<repo>:<tag> is pulled instead
 #   --install | --no-install   install now or only write the files (default: install)
@@ -26,8 +28,10 @@
 # Reads:   templates/wiki.env, templates/compose.yaml, templates/settings.php, templates/README.md;
 #          wikis/*/.env (ports in use); docker (existing projects, images)
 # Writes:  wikis/<name>/.env (mode 600, all secrets generated with openssl rand), compose.yaml,
-#          settings.php, branding/, README.md. With install: the image (pull or build), the volumes
-#          <name>_db-data, <name>_images, <name>_wiki-state and the running containers.
+#          settings.php, branding/, README.md; with --storage folders also the empty folders
+#          data/db, data/images, data/state (mode 700; the containers take over their ownership).
+#          With install: the image (pull or build), the volumes <name>_db-data, <name>_images,
+#          <name>_wiki-state (storage volumes) and the running containers.
 # Exit:    0 when the files are written (and, with install, the wiki is installed and passed
 #          smoke.sh); 1 on an invalid answer in --yes mode, on abort, or when a step fails. A failed
 #          install keeps the files, so `scripts/install.sh <name>` can be retried.
@@ -158,6 +162,11 @@ validate_font() {
   echo "  One of: roboto, default." >&2; return 1
 }
 
+validate_storage() {
+  case "$1" in volumes|folders) return 0 ;; esac
+  echo "  One of: volumes, folders." >&2; return 1
+}
+
 validate_image() {
   [[ "$1" =~ ^[a-z0-9][a-z0-9._/:-]*:[A-Za-z0-9._-]+$ ]] && [[ "${1##*/}" == *:* ]] \
     || { echo "  Use <image>:<tag>, e.g. mediawiki-smw:1.46-smw7.3 or ghcr.io/<owner>/<repo>:1.46-smw7.3." >&2; return 1; }
@@ -244,6 +253,64 @@ default_image() {
   echo "$template_image:$template_tag"
 }
 
+# Writes the compose file $2 from the template $1 for the data storage $3 (volumes or folders). The
+# template uses named volumes; for folders the three mounts are rewritten to relative bind mounts
+# and the top-level volumes block is replaced by a comment that says how to switch back. Exits 1 when
+# the template no longer has the lines this expects.
+write_compose_file() {
+  local template_file="$1" target_file="$2" storage_mode="$3"
+  if [ "$storage_mode" = volumes ]; then
+    cp "$template_file" "$target_file"
+    return 0
+  fi
+  sed -e 's|^\( *- \)db-data:/var/lib/mysql|\1./data/db:/var/lib/mysql|' \
+      -e 's|^\( *- \)images:/var/www/html/images|\1./data/images:/var/www/html/images|' \
+      -e 's|^\( *- \)wiki-state:/var/lib/wiki-state|\1./data/state:/var/lib/wiki-state|' \
+      -e 's|data storage: see the end of this file|data storage: folders, see the end of this file|' \
+      -e '/^# Data storage: /,$d' "$template_file" > "$target_file"
+  cat >> "$target_file" <<'EOF'
+# Data storage: folders (chosen when the wiki was created). Database, uploads and update stamp live in
+# ./data/db, ./data/images and ./data/state next to this file, so everything about this wiki is in one
+# folder. Docker creates no volumes for them. The containers set the owners (MySQL: uid 999, wiki:
+# www-data, uid 33), so on Linux you need root to read or delete them. Copy ./data/db only while the
+# database is stopped (`docker compose down`), or use scripts/backup.sh, which dumps it consistently.
+# To switch to Docker named volumes: replace the three ./data/... mounts above with
+#   db-data:/var/lib/mysql      images:/var/www/html/images      wiki-state:/var/lib/wiki-state
+# and add at the end of this file
+#   volumes:
+#     db-data:
+#     images:
+#     wiki-state:
+# then move the data over with scripts/backup.sh and scripts/restore.sh.
+EOF
+  [ "$(grep -c '^ *- \./data/' "$target_file")" = 3 ] || die "templates/compose.yaml lacks the three data mounts"
+  ! grep -q '^ *- \(db-data\|images\|wiki-state\):' "$target_file" || die "templates/compose.yaml: a named volume mount was not rewritten"
+}
+
+# Writes the README $2 of the wiki from the template $1: @NAME@ becomes the wiki name, and the line
+# "@STORAGE@" the paragraph that describes the data storage $3 (volumes or folders).
+write_readme_file() {
+  local template_file="$1" target_file="$2" storage_mode="$3" line
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [ "$line" = "@STORAGE@" ]; then
+      if [ "$storage_mode" = folders ]; then
+        printf '%s\n' \
+          "Data storage: **folders**. \`data/db\` (MySQL), \`data/images\` (uploads) and \`data/state\` (update" \
+          "stamp) hold all data of this wiki. The containers own them (MySQL uid 999, the wiki www-data, uid 33), so" \
+          "reading or deleting them on Linux needs root. Copy \`data/db\` only while the database is stopped" \
+          "(\`docker compose down\`), or use \`scripts/backup.sh @NAME@\`. See the end of \`compose.yaml\` for how to switch to volumes."
+      else
+        printf '%s\n' \
+          "Data storage: **Docker volumes** \`@NAME@_db-data\`, \`@NAME@_images\` and \`@NAME@_wiki-state\`, managed by" \
+          "Docker (\`docker volume ls\`). Use \`scripts/backup.sh @NAME@\` for backups. See the end of \`compose.yaml\` for how to" \
+          "switch to folders next to this file."
+      fi
+    else
+      printf '%s\n' "$line"
+    fi
+  done < "$template_file" | sed "s/@NAME@/$wiki_name/g" > "$target_file"
+}
+
 # Writes the .env file $2 from the template $1: every "KEY=..." line whose KEY has a value in
 # setting_<KEY> (see set_setting) gets that value, quoted; everything else (comments, other
 # defaults) is copied. Exits 1 when a set value has no line in the template.
@@ -276,10 +343,10 @@ set_setting() {
 
 assume_yes=0; install_choice=""; refresh_image=0
 opt_name=""; opt_port=""; opt_server=""; opt_site_name=""; opt_admin_user=""; opt_lang=""
-opt_timezone=""; opt_date_format=""; opt_theme=""; opt_font=""; opt_image=""
+opt_timezone=""; opt_date_format=""; opt_theme=""; opt_font=""; opt_image=""; opt_storage=""
 # The answers, set by ask
 wiki_name=""; wiki_port=""; wiki_server=""; site_name=""; admin_user=""; wiki_lang=""
-wiki_timezone=""; date_format=""; default_theme=""; wiki_font=""; image_ref=""
+wiki_timezone=""; date_format=""; default_theme=""; wiki_font=""; image_ref=""; storage_mode=""
 admin_password=""; password_origin=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -288,7 +355,7 @@ while [ $# -gt 0 ]; do
     --install) install_choice=yes; shift; continue ;;
     --no-install) install_choice=no; shift; continue ;;
     --refresh-image) refresh_image=1; shift; continue ;;
-    --name|--port|--server|--site-name|--admin-user|--lang|--timezone|--date-format|--theme|--font|--image)
+    --name|--port|--server|--site-name|--admin-user|--lang|--timezone|--date-format|--theme|--font|--image|--storage)
       [ $# -ge 2 ] || die "$1 needs a value"
       case "$1" in
         --name) opt_name="$2" ;;          --port) opt_port="$2" ;;
@@ -296,7 +363,7 @@ while [ $# -gt 0 ]; do
         --admin-user) opt_admin_user="$2" ;; --lang) opt_lang="$2" ;;
         --timezone) opt_timezone="$2" ;;  --date-format) opt_date_format="$2" ;;
         --theme) opt_theme="$2" ;;        --font) opt_font="$2" ;;
-        --image) opt_image="$2" ;;
+        --image) opt_image="$2" ;;        --storage) opt_storage="$2" ;;
       esac
       shift 2 ;;
     -*) echo "Unknown option: $1" >&2; usage 1 ;;
@@ -320,6 +387,7 @@ ask date_format "Date format (dmy, mdy, ymd, ISO 8601)" "dmy" validate_date_form
 ask default_theme "Default theme (os, day, night)" "os" validate_theme "$opt_theme"
 ask wiki_font "Font (roboto, default)" "roboto" validate_font "$opt_font"
 ask image_ref "Image (a plain name is built from this repository; ghcr.io/... is pulled)" "$(default_image)" validate_image "$opt_image"
+ask storage_mode "Data storage: volumes (Docker-managed) or folders (wikis/$wiki_name/data/...)" "volumes" validate_storage "$opt_storage"
 
 # Split at the last ":" (the tag; validate_image made sure it comes after the last "/")
 WIKI_IMAGE="${image_ref%:*}"
@@ -356,22 +424,36 @@ mkdir "$wiki_dir"   # mode 700 (umask in lib.sh): the folder holds the secrets
 write_env_file "$TEMPLATES_DIR/wiki.env" "$wiki_dir/.env.partial"
 chmod 600 "$wiki_dir/.env.partial"
 mv "$wiki_dir/.env.partial" "$wiki_dir/.env"
-cp "$TEMPLATES_DIR/compose.yaml" "$wiki_dir/compose.yaml"
-sed "s/@NAME@/$wiki_name/g" "$TEMPLATES_DIR/README.md" > "$wiki_dir/README.md"
+write_compose_file "$TEMPLATES_DIR/compose.yaml" "$wiki_dir/compose.yaml" "$storage_mode"
+write_readme_file "$TEMPLATES_DIR/README.md" "$wiki_dir/README.md" "$storage_mode"
 # branding/ and settings.php are bind-mounted: www-data in the container must be able to read them
 mkdir "$wiki_dir/branding"
 chmod 755 "$wiki_dir/branding"
 cp "$TEMPLATES_DIR/settings.php" "$wiki_dir/settings.php"
+# Data folders: mode 700 (umask in lib.sh), like the wiki folder. The Docker daemon runs as root (also
+# in Docker Desktop's VM), so it can mount them whoever owns them; the containers start as root and
+# take over: MySQL's entrypoint chowns its datadir, the wiki's entrypoint the uploads and the state.
+if [ "$storage_mode" = folders ]; then
+  mkdir -p "$wiki_dir/data/db" "$wiki_dir/data/images" "$wiki_dir/data/state"
+fi
 chmod 644 "$wiki_dir/settings.php" "$wiki_dir/compose.yaml" "$wiki_dir/README.md"
 files_complete=1
 
+if [ "$storage_mode" = folders ]; then
+  storage_description="folders: wikis/$wiki_name/data/{db,images,state}"
+  data_line="  data/           db, images, state: the data of the wiki"
+else
+  storage_description="volumes: Docker volumes ${wiki_name}_db-data, ${wiki_name}_images, ${wiki_name}_wiki-state"
+  data_line=""
+fi
 case "$WIKI_IMAGE" in */*) image_action="pulled from its registry" ;; *) image_action="built from $REPO_ROOT" ;; esac
 cat <<EOF
 
 Created wikis/$wiki_name:
   .env            settings and generated secrets (mode 600)
   compose.yaml    db + wiki; Traefik block commented out (see README.md there for production)
-  settings.php    extra MediaWiki settings (empty)
+${data_line:+$data_line
+}  settings.php    extra MediaWiki settings (empty)
   branding/       logo, favicon, branding.css (empty)
   README.md       what to edit for production
 
@@ -380,6 +462,7 @@ Created wikis/$wiki_name:
   Admin       $admin_user   (password $password_origin; ADMIN_PASSWORD in .env)
   Locale      $wiki_lang, $wiki_timezone, $date_format; theme $default_theme; font $wiki_font
   Image       $WIKI_IMAGE:$WIKI_TAG   ($image_action if missing)
+  Storage     $storage_description
 EOF
 
 # 3. Install now?

@@ -5,7 +5,7 @@
 #
 # Provides:
 #   REPO_ROOT, WIKIS_DIR (REPO_ROOT/wikis), BACKUPS_DIR (REPO_ROOT/backups)
-#   die, is_valid_wiki_name, ensure_image, load_wiki
+#   die, is_valid_wiki_name, wiki_storage_mode, ensure_image, load_wiki
 #   after load_wiki: WIKI_NAME_ARG, WIKI_DIR, every variable of the wiki's .env (exported), and the
 #   command arrays COMPOSE (docker compose for this wiki) and RUN_ONE_OFF (compose run for one-off
 #   containers)
@@ -33,6 +33,12 @@ die() { echo "$*" >&2; exit 1; }
 is_valid_wiki_name() {
   local candidate="$1"
   [[ "$candidate" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]]
+}
+
+# Prints how the wiki folder $1 stores its data: "folders" when its compose.yaml bind-mounts
+# ./data/db, otherwise "volumes" (Docker named volumes). Read from the file, so it follows hand edits.
+wiki_storage_mode() {
+  if grep -q '^ *- \./data/db:' "$1/compose.yaml" 2> /dev/null; then echo folders; else echo volumes; fi
 }
 
 # Makes sure the image WIKI_IMAGE:WIKI_TAG is available. Without an argument it does nothing when the

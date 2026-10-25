@@ -16,7 +16,7 @@ services:
       MYSQL_USER: ${DB_USER:-wiki}
       MYSQL_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
     volumes:
-      - db-data:/var/lib/mysql
+      - db-data:/var/lib/mysql   # data storage: see the end of this file
     healthcheck:
       test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h 127.0.0.1 -uroot --silent"]
       interval: 5s
@@ -65,8 +65,8 @@ services:
       # and settings.php, included last by the image's LocalSettings.php
       - ./branding:/var/www/html/branding:ro
       - ./settings.php:/config/instance.php:ro
-      - images:/var/www/html/images
-      - wiki-state:/var/lib/wiki-state
+      - images:/var/www/html/images   # uploads (all of them, also old versions and deleted files)
+      - wiki-state:/var/lib/wiki-state   # update stamp and lock (a few bytes)
     healthcheck:
       # Healthy once update.php is done and MediaWiki answers (the login page is public)
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost/index.php?title=Special:UserLogin"]
@@ -110,7 +110,13 @@ services:
 #     name: ${TRAEFIK_NETWORK:-web}
 #     external: true
 
+# Data storage: Docker named volumes (<project>_db-data, _images, _wiki-state), managed by Docker.
+# To keep the data in folders next to this file instead (visible, easy to include in file-level
+# backups): replace the three mounts above with
+#   ./data/db:/var/lib/mysql      ./data/images:/var/www/html/images      ./data/state:/var/lib/wiki-state
+# and delete the `volumes:` block below. Create the folders first (mkdir -p data/db data/images
+# data/state, mode 700) and move the existing data over with scripts/backup.sh and restore.sh.
 volumes:
   db-data:
   images:
-  wiki-state:   # update stamp and lock (a few bytes)
+  wiki-state:

@@ -159,7 +159,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # Install the freshly built amd64 image (rebuilt from the build job's cache) as a throwaway wiki
+  # Install the freshly built amd64 image (rebuilt from the build job's cache) as throwaway wikis
   # created by scripts/new-wiki.sh in non-interactive mode, so the wiki generator, install.sh and
   # smoke.sh are tested together: login page, private API, admin login, SMW. Publishing waits for it.
   smoke:
@@ -181,10 +181,18 @@ jobs:
           cache-from: type=gha,scope=linux/amd64
       - name: Create, install and smoke-test a throwaway wiki
         run: scripts/new-wiki.sh --yes --name ci --site-name "CI Wiki" --image mediawiki-smw:smoke
+      # Same again with bind-mounted data folders: on this Linux runner the containers must take over
+      # the root-owned folders (MySQL's entrypoint, ours for uploads and state)
+      - name: Create, install and smoke-test a throwaway wiki with data folders
+        run: scripts/new-wiki.sh --yes --name ci-dir --storage folders --site-name "CI Wiki" --image mediawiki-smw:smoke
       - if: failure()
-        run: scripts/compose.sh ci logs --no-color
+        run: |
+          scripts/compose.sh ci logs --no-color
+          scripts/compose.sh ci-dir logs --no-color
       - if: always()
-        run: scripts/compose.sh ci down -v || true
+        run: |
+          scripts/compose.sh ci down -v || true
+          scripts/compose.sh ci-dir down -v || true
 
   merge:
     needs: [prepare, build, smoke]

@@ -19,12 +19,13 @@ Clone the repository once per machine. Wikis and backups live inside the clone a
     wikis/<name>/
       .env            settings and secrets (mode 600)
       compose.yaml    both containers; standalone, yours to edit
+      data/           only with --storage folders: db/ (MySQL), images/ (uploads), state/ (update stamp)
       branding/       optional: wordmark.svg, icon.svg, favicon.svg|png|ico, apple-touch-icon.png, branding.css
       settings.php    optional extra MediaWiki settings, included last (must exist, may stay empty)
       README.md       what to edit for production
     backups/<name>/wiki-<timestamp>.tar.gz
 
-`<name>` is the folder name and the compose project name (it also names the volumes `<name>_db-data`, `<name>_images`, `<name>_wiki-state`). A wiki folder is self-contained: run plain `docker compose` inside it, or copy it alone to a server.
+`<name>` is the folder name and the compose project name (with the default storage it also names the volumes `<name>_db-data`, `<name>_images`, `<name>_wiki-state`). A wiki folder is self-contained: run plain `docker compose` inside it, or copy it alone to a server.
 
 `templates/` holds what `new-wiki.sh` copies. Updating the repository never touches existing wikis: their `compose.yaml` stays as generated. After an update, compare it with `templates/compose.yaml` and merge changes by hand if you want them. Configuration changes (`config/`) reach a wiki with the next image.
 
@@ -32,7 +33,7 @@ Clone the repository once per machine. Wikis and backups live inside the clone a
 
     scripts/new-wiki.sh
 
-It asks for the name, the local port (the next free one from 8080), the public URL, site name, admin user and password (generated unless you type one), language, time zone, date format, default theme, font and image, with defaults in brackets. It generates all secrets with `openssl rand`, writes the folder above, shows a summary and asks whether to install now: get the image (a plain name such as `mediawiki-smw` is built from this repository, `ghcr.io/...` is pulled), install, start, wait until healthy, and run the smoke test.
+It asks for the name, the local port (the next free one from 8080), the public URL, site name, admin user and password (generated unless you type one), language, time zone, date format, default theme, font, image and data storage, with defaults in brackets. It generates all secrets with `openssl rand`, writes the folder above, shows a summary and asks whether to install now: get the image (a plain name such as `mediawiki-smw` is built from this repository, `ghcr.io/...` is pulled), install, start, wait until healthy, and run the smoke test.
 
 Non-interactive (CI, scripts): every answer has an option, `--yes` takes defaults for the rest, and the admin password comes from `ADMIN_PASSWORD` in the environment or is generated:
 
@@ -40,6 +41,15 @@ Non-interactive (CI, scripts): every answer has an option, `--yes` takes default
       --image ghcr.io/<owner>/<repo>:1.46-smw7.3 --no-install
 
 `scripts/new-wiki.sh --help` lists all options.
+
+### Data storage
+
+`--storage volumes|folders` (asked interactively, default `volumes`) decides where database, uploads and update stamp live:
+
+- `volumes`: Docker named volumes `<name>_db-data`, `<name>_images`, `<name>_wiki-state`. Docker manages them; they are the faster choice on Docker Desktop for macOS, but hidden under `/var/lib/docker`.
+- `folders`: bind mounts to `wikis/<name>/data/db`, `data/images` and `data/state`, so everything about a wiki is in one visible folder that file-level backups and `rsync` can include. Copy `data/db` only while the database is stopped (`docker compose down`), or use `scripts/backup.sh`, which dumps it consistently. The containers own these folders (MySQL uid 999, the wiki `www-data`, uid 33): on Linux you need root to read or delete them.
+
+Ownership is handled automatically: MySQL's official entrypoint chowns its data directory when it starts as root, and this image's entrypoint hands `images` and `state` to `www-data` at startup if the top-level owner is wrong (it never walks the upload tree; `restore.sh` chowns recursively after unpacking). `new-wiki.sh` creates the folders with mode 700. The generated `compose.yaml` explains at its end how to switch modes; move data between them with `backup.sh` and `restore.sh`.
 
 ## Scripts
 
@@ -53,7 +63,7 @@ All take the wiki name first.
 | `scripts/smoke.sh <name>` | Read-only check: login page, private API, admin login, SMW |
 | `scripts/backup.sh <name>` | `backups/<name>/wiki-<timestamp>.tar.gz` |
 | `scripts/restore.sh <name> [--yes] <archive>` | Replace database and uploads from a backup |
-| `scripts/list-wikis.sh` | Name, URL, port and state of all wikis |
+| `scripts/list-wikis.sh` | Name, URL, port, storage mode and state of all wikis |
 
 The scripts stop with a clear message when a required setting is missing, run with `umask 077`, never put passwords on command lines, and start one-off containers with `traefik.enable=false` so Traefik never routes to them.
 
@@ -75,8 +85,8 @@ On the server, either clone the repository and create the wiki there with `new-w
 
 ## Updates
 
-- The CI workflow (`.github/workflows/build.yml`) builds amd64 and arm64 images, creates a throwaway wiki with `new-wiki.sh --yes`, installs and smoke-tests it, and only then publishes `ghcr.io/<owner>/<repo>` with three tags: immutable `<MW>-smw<SMW>-r<REV>.<run>` (`.<attempt>` on re-runs; an existing immutable tag is never overwritten), floating `<MW minor>-smw<SMW minor>` and `<MW minor>`. A weekly run publishes only when the base image or the recipe (`Dockerfile`, `docker/`, `config/`) changed. Pull requests are built and smoke-tested, never published.
-- Watchtower (e.g. the maintained `nickfedor/watchtower` fork) follows the floating tag. On start, the entrypoint compares the image recipe plus a hash of the configuration with the stamp in the `wiki-state` volume and runs `update.php` once when they differ; a plain restart skips it. Watch for `[entrypoint] update.php done` in `docker compose logs wiki`.
+- The CI workflow (`.github/workflows/build.yml`) builds amd64 and arm64 images, creates two throwaway wikis with `new-wiki.sh --yes` (Docker volumes and data folders), installs and smoke-tests them, and only then publishes `ghcr.io/<owner>/<repo>` with three tags: immutable `<MW>-smw<SMW>-r<REV>.<run>` (`.<attempt>` on re-runs; an existing immutable tag is never overwritten), floating `<MW minor>-smw<SMW minor>` and `<MW minor>`. A weekly run publishes only when the base image or the recipe (`Dockerfile`, `docker/`, `config/`) changed. Pull requests are built and smoke-tested, never published.
+- Watchtower (e.g. the maintained `nickfedor/watchtower` fork) follows the floating tag. On start, the entrypoint compares the image recipe plus a hash of the configuration with the stamp in `wiki-state` (volume or `data/state`) and runs `update.php` once when they differ; a plain restart skips it. Watch for `[entrypoint] update.php done` in `docker compose logs wiki`.
 - Renovate (`renovate.json`) bumps the versions pinned in the `Dockerfile`. MediaWiki patch releases and extension commits on the release branch are automerged once build and smoke passed (patch releases also need to be 3 days old); SMW/SRF and PageForms updates stay manual.
 - Manual update (new SMW minor, new MediaWiki branch): back up, set `WIKI_TAG`, `docker compose pull && docker compose up -d`.
 - Rollback: pin the previous immutable tag in `WIKI_TAG` and `docker compose up -d` (Watchtower leaves pinned tags alone). If the newer version changed the schema, restore the backup taken before the update.
@@ -87,7 +97,7 @@ On the server, either clone the repository and create the wiki there with `new-w
     scripts/restore.sh <name> backups/<name>/wiki-<ts>.tar.gz    # asks you to type the name
     scripts/restore.sh <name> --yes <archive>                    # non-interactive
 
-A backup holds the SQL dump and the whole upload directory (current files, old versions, deleted files, thumbnails). It is written under a temporary name, renamed only when complete, and readable by its owner only. Restore first checks the archive, then asks for confirmation (or takes `--yes`), replaces database and uploads, gives the files back to `www-data`, runs `update.php` and starts the wiki. It also moves a wiki: create the target with `new-wiki.sh --no-install`, copy `WIKI_OATH_KEY` (otherwise enrolled 2FA stops working) and `WIKI_SECRET_KEY` from the old `.env`, then restore. Run backups before Watchtower's update window.
+Backup and restore work through the containers, so they behave the same for both storage modes. A backup holds the SQL dump and the whole upload directory (current files, old versions, deleted files, thumbnails). It is written under a temporary name, renamed only when complete, and readable by its owner only. Restore first checks the archive, then asks for confirmation (or takes `--yes`), replaces database and uploads, gives the files back to `www-data`, runs `update.php` and starts the wiki. It also moves a wiki: create the target with `new-wiki.sh --no-install`, copy `WIKI_OATH_KEY` (otherwise enrolled 2FA stops working) and `WIKI_SECRET_KEY` from the old `.env`, then restore. Run backups before Watchtower's update window.
 
 ## Publishing the image
 

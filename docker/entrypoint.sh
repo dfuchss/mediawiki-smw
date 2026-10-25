@@ -10,7 +10,9 @@
 #
 # Reads:  WIKI_RECIPE (set in the image), /config/*.php (baked in, plus the mounted settings.php),
 #         DB_NAME/DB_USER/DB_PASSWORD, JOB_RUNNER_INTERVAL.
-# Writes: /var/lib/wiki-state/stamp and .../lock (volume wiki-state).
+# Writes: /var/lib/wiki-state/stamp and .../lock (volume or folder wiki-state). When it starts as root
+#         it also hands /var/www/html/images and /var/lib/wiki-state to www-data if they belong to
+#         someone else (a fresh bind-mounted folder is owned by root or the host user).
 # Exit:   0 after `update` or a clean stop, 143 on a signal before the supervisor runs, 1 when
 #         update.php fails, the database stays unreachable, or Apache or the job loop dies (the
 #         restart policy then restarts the container).
@@ -48,7 +50,8 @@ run_child() {
   return "$exit_code"
 }
 
-STATE_DIR=/var/lib/wiki-state   # named volume wiki-state
+STATE_DIR=/var/lib/wiki-state   # named volume or host folder
+IMAGES_DIR=/var/www/html/images # uploads: named volume or host folder
 STAMP_FILE="$STATE_DIR/stamp"   # recipe of the last image+config whose update.php succeeded
 # The configuration (baked into the image, plus the wiki's mounted settings.php) is part of the
 # recipe: loading an extension or changing SMW settings can need update.php.
@@ -57,6 +60,24 @@ RECIPE="${WIKI_RECIPE:?WIKI_RECIPE missing from the image} config=$CONFIG_HASH"
 
 # Runs "$@" as www-data (Apache drops to it as well), unless we already are non-root.
 as_www() { if [ "$(id -u)" = 0 ]; then runuser -u www-data -- "$@"; else "$@"; fi; }
+
+# Gives the data directories $@ to www-data when running as root and the top-level owner is someone
+# else. Docker creates a named volume with the owner of the image's directory, but a bind-mounted host
+# folder keeps its host owner (root or the host user), where Apache could not write uploads. Only the
+# directory itself is checked and changed, never the tree below it (a big upload tree would make
+# every start slow); restore.sh chowns recursively after unpacking.
+ensure_data_ownership() {
+  [ "$(id -u)" = 0 ] || return 0
+  local data_dir wanted_owner current_owner
+  wanted_owner="$(id -u www-data):$(id -g www-data)"
+  for data_dir in "$@"; do
+    [ -d "$data_dir" ] || continue
+    current_owner="$(stat -c '%u:%g' "$data_dir")"
+    [ "$current_owner" = "$wanted_owner" ] && continue
+    log "giving $data_dir to www-data (was $current_owner)"
+    chown www-data:www-data "$data_dir" || log "warning: cannot chown $data_dir; uploads may fail"
+  done
+}
 
 # Checks the database. Exit 0: wiki installed, 1: reachable but empty (fresh volume), 2: unreachable.
 # shellcheck disable=SC2016  # PHP code, not shell
@@ -98,6 +119,7 @@ run_update() {
 locked_update() {
   local mode="$1"
   mkdir -p "$STATE_DIR"
+  ensure_data_ownership "$STATE_DIR" "$IMAGES_DIR"
   # Serialise schema changes: a second container or `compose run wiki update` waits here. The stamp
   # is read only after taking the lock, so the loser of a race sees the winner's stamp.
   exec 9>"$STATE_DIR/lock"
