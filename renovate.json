@@ -1,0 +1,60 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "platformAutomerge": false,
+  "customManagers": [
+    {
+      "description": "Versions pinned as Dockerfile ARGs with a '# renovate:' comment",
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>docker|packagist) depName=(?<depName>\\S+)\\s*\\nARG \\w+_VERSION=(?<currentValue>\\S+)"
+      ]
+    },
+    {
+      "description": "Git extensions pinned by commit: a release branch head (git-refs) or a release tag (git-tags)",
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>git-refs|git-tags) depName=(?<depName>\\S+) packageName=(?<packageName>\\S+) (branch|version)=(?<currentValue>\\S+)\\s*\\nARG \\w+_SHA=(?<currentDigest>[0-9a-f]{40})"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "MediaWiki: stay on 1.46; the move to 1.47 LTS is a manual change (REL1_47 branches, SMW support)",
+      "matchDatasources": ["docker"],
+      "matchDepNames": ["mediawiki"],
+      "allowedVersions": "/^1\\.46\\.\\d+$/"
+    },
+    {
+      "description": "MediaWiki 1.46.x patch releases: automerge once the release is 3 days old and the build and smoke checks passed on the PR",
+      "matchDatasources": ["docker"],
+      "matchDepNames": ["mediawiki"],
+      "matchUpdateTypes": ["patch"],
+      "minimumReleaseAge": "3 days",
+      "automerge": true
+    },
+    {
+      "description": "Extension commits on the release branch: automerge once the build and smoke checks passed on the PR. git-refs has no release timestamps, so the 3-day age applies only where Renovate knows it (timestamp-optional; 'required' would hold these PRs forever)",
+      "matchDatasources": ["git-refs"],
+      "matchUpdateTypes": ["digest"],
+      "minimumReleaseAge": "3 days",
+      "minimumReleaseAgeBehaviour": "timestamp-optional",
+      "automerge": true
+    },
+    {
+      "description": "SMW and SRF: always a reviewed PR (read the release notes; minor versions change the image tag)",
+      "matchDatasources": ["packagist"],
+      "matchDepNames": ["mediawiki/semantic-media-wiki", "mediawiki/semantic-result-formats"],
+      "automerge": false
+    },
+    {
+      "description": "MySQL: the floating 8.4 tag already follows patches (Watchtower); never propose 9.x innovation releases",
+      "matchDatasources": ["docker"],
+      "matchDepNames": ["mysql"],
+      "matchUpdateTypes": ["major", "minor"],
+      "enabled": false
+    }
+  ]
+}

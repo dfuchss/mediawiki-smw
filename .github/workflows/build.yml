@@ -1,0 +1,222 @@
+# Builds the wiki image for amd64 and arm64, smoke-tests the amd64 image (new-wiki.sh: install + smoke.sh)
+# and only then publishes it to GHCR as ghcr.io/<owner>/<repo>:
+#   <MW>-smw<SMW>-r<IMAGE_REVISION>.<run number>[.<attempt>]   immutable (pin it to roll back)
+#   <MW minor>-smw<SMW minor>, <MW minor>                      floating (Watchtower follows the first)
+# A re-run gets its own immutable tag (".<attempt>" from the second attempt on), and the merge job
+# refuses to push when the immutable tag already exists: a published one is never overwritten.
+# Pull requests build and smoke-test on every change (no paths filter, so the required checks
+# "build (linux/amd64)", "build (linux/arm64)" and "smoke" always report) and never publish.
+# The weekly run publishes only when the base image or the recipe changed, so Watchtower does not
+# restart the wiki for nothing.
+name: build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - docker/**
+      - config/**
+      - .github/workflows/build.yml
+  pull_request:
+  schedule:
+    - cron: "17 3 * * 1"   # Mondays 03:17 UTC: pick up base image (OS/PHP) security updates
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      tags: ${{ steps.meta.outputs.tags }}
+      version: ${{ steps.meta.outputs.version }}
+      build_id: ${{ steps.meta.outputs.build_id }}
+      floating: ${{ steps.meta.outputs.floating }}
+      base_digest: ${{ steps.meta.outputs.base_digest }}
+      recipe_sha: ${{ steps.meta.outputs.recipe_sha }}
+      build: ${{ steps.decide.outputs.build }}
+      push: ${{ steps.decide.outputs.push }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3   # only needed while the package is private
+        continue-on-error: true
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        name: Versions and tags from the Dockerfile
+        run: |
+          arg() { sed -n "s/^ARG $1=//p" Dockerfile; }
+          mw="$(arg MW_VERSION)"; smw="$(arg SMW_VERSION)"; rev="$(arg IMAGE_REVISION)"
+          [ -n "$mw" ] && [ -n "$smw" ] && [ -n "$rev" ] || { echo "ARGs missing in Dockerfile"; exit 1; }
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          build_id="$GITHUB_RUN_NUMBER"
+          if [ "$GITHUB_RUN_ATTEMPT" -gt 1 ]; then build_id="$build_id.$GITHUB_RUN_ATTEMPT"; fi
+          version="$mw-smw$smw-r$rev.$build_id"
+          floating="${mw%.*}-smw${smw%.*}"
+          base_digest="$(docker buildx imagetools inspect "mediawiki:$mw" --format '{{json .Manifest}}' | jq -r .digest)"
+          recipe_sha="$(git ls-files -z Dockerfile docker config | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)"
+          {
+            echo "image=$image"
+            echo "version=$version"
+            echo "build_id=$build_id"
+            echo "floating=$floating"
+            echo "tags=$image:$version,$image:$floating,$image:${mw%.*}"
+            echo "base_digest=$base_digest"
+            echo "recipe_sha=$recipe_sha"
+          } | tee -a "$GITHUB_OUTPUT"
+      - id: decide
+        name: Compare with the published floating tag
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          FLOATING: ${{ steps.meta.outputs.floating }}
+          BASE_DIGEST: ${{ steps.meta.outputs.base_digest }}
+          RECIPE_SHA: ${{ steps.meta.outputs.recipe_sha }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          published=""; old_base=""; old_recipe=""
+          if json="$(docker buildx imagetools inspect "$IMAGE:$FLOATING" --format '{{json .Image}}' 2>/dev/null)"; then
+            published="$IMAGE:$FLOATING"
+            labels="$(jq -c 'if has("linux/amd64") then .["linux/amd64"] else . end | .config.Labels // {}' <<<"$json")"
+            old_base="$(jq -r '.["org.opencontainers.image.base.digest"] // ""' <<<"$labels")"
+            old_recipe="$(jq -r '.["wiki.recipe.sha256"] // ""' <<<"$labels")"
+          fi
+          echo "published=$published base=$old_base recipe=$old_recipe"
+          build=true; push=true
+          if [ "$EVENT" = pull_request ]; then
+            push=false
+          elif [ "$EVENT" = schedule ] && [ -n "$published" ] \
+               && [ "$old_base" = "$BASE_DIGEST" ] && [ "$old_recipe" = "$RECIPE_SHA" ]; then
+            build=false; push=false
+            echo "::notice::Base image and recipe unchanged since $published; nothing to publish."
+          fi
+          { echo "build=$build"; echo "push=$push"; } | tee -a "$GITHUB_OUTPUT"
+
+  build:
+    name: build (${{ matrix.platform }})
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - if: needs.prepare.outputs.push == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          pull: true
+          build-args: BUILD_ID=${{ needs.prepare.outputs.build_id }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.base.name=docker.io/library/mediawiki
+            org.opencontainers.image.base.digest=${{ needs.prepare.outputs.base_digest }}
+            wiki.recipe.sha256=${{ needs.prepare.outputs.recipe_sha }}
+          # Push the per-arch image by digest only (no tag); the merge job tags the combined index.
+          # Pull requests build into the cache only.
+          outputs: ${{ needs.prepare.outputs.push == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', needs.prepare.outputs.image) || 'type=cacheonly' }}
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
+      - if: needs.prepare.outputs.push == 'true'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: mkdir -p /tmp/digests && touch "/tmp/digests/${DIGEST#sha256:}"
+      - if: needs.prepare.outputs.push == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.runner }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Install the freshly built amd64 image (rebuilt from the build job's cache) as a throwaway wiki
+  # created by scripts/new-wiki.sh in non-interactive mode, so the wiki generator, install.sh and
+  # smoke.sh are tested together: login page, private API, admin login, SMW. Publishing waits for it.
+  smoke:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          build-args: BUILD_ID=${{ needs.prepare.outputs.build_id }}
+          tags: mediawiki-smw:smoke
+          load: true
+          cache-from: type=gha,scope=linux/amd64
+      - name: Create, install and smoke-test a throwaway wiki
+        run: scripts/new-wiki.sh --yes --name ci --site-name "CI Wiki" --image mediawiki-smw:smoke
+      - if: failure()
+        run: scripts/compose.sh ci logs --no-color
+      - if: always()
+        run: scripts/compose.sh ci down -v || true
+
+  merge:
+    needs: [prepare, build, smoke]
+    if: needs.prepare.outputs.push == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digest-*
+          path: /tmp/digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create the multi-arch index and its tags
+        working-directory: /tmp/digests
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          TAGS: ${{ needs.prepare.outputs.tags }}
+        run: |
+          tag_args=(); IFS=, read -ra tags <<<"$TAGS"
+          # Never overwrite an immutable tag ("Re-run failed jobs" reuses prepare's version)
+          if docker buildx imagetools inspect "${tags[0]}" > /dev/null 2>&1; then
+            echo "::error::${tags[0]} already exists; re-run the whole workflow for a new tag"; exit 1
+          fi
+          for t in "${tags[@]}"; do tag_args+=(-t "$t"); done
+          sources=(); for d in *; do sources+=("$IMAGE@sha256:$d"); done
+          [ "${#sources[@]}" = 2 ] || { echo "expected 2 digests, got ${#sources[@]}"; exit 1; }
+          docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
+          docker buildx imagetools inspect "${tags[0]}"

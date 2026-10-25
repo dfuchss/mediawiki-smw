@@ -1,0 +1,11 @@
+# The image needs only Dockerfile, config/ and docker/; never send wikis, backups or secrets
+.git
+.github
+.env
+wikis
+backups
+scripts
+templates
+README.md
+renovate.json
+.shellcheckrc

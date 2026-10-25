@@ -1,0 +1,4 @@
+# Wikis (settings, secrets) and their backups live in the clone but never in the repository
+wikis/
+backups/
+.env

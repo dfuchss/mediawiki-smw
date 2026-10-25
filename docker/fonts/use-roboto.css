@@ -1,0 +1,28 @@
+/* Applies Roboto (WIKI_FONT=roboto, the default). The @font-face rules are generated in the image from
+   the pinned @fontsource/roboto package (fonts/roboto/font-face.css, see Dockerfile; SIL Open Font
+   License 1.1). Both are loaded on every page by config/skin.php. */
+
+/* Screen only (print keeps MediaWiki's serif print style): Roboto everywhere,
+   including the serif h1/h2 and page title of Vector 2022 (the html prefix outranks Vector's selectors).
+   Code (pre, code, tt, kbd, samp, .mw-code) is not listed and stays monospace. */
+@media screen {
+	html,
+	html body,
+	html .mw-body h1,
+	html .mw-body .mw-heading1,
+	html .mw-body-content h1,
+	html .mw-body-content .mw-heading1,
+	html .mw-body-content h2,
+	html .mw-body-content .mw-heading2,
+	html .mw-first-heading,
+	html .vector-sticky-header-context-bar-primary,
+	html .mw-editsection,
+	html .mw-editsection-like,
+	h3, h4, h5, h6,
+	.mw-heading3, .mw-heading4, .mw-heading5, .mw-heading6,
+	table, ol, ul, dl, figure, .thumb,
+	.mw-footer, .printfooter,
+	input, button, textarea, select {
+		font-family: 'Roboto', sans-serif;
+	}
+}
