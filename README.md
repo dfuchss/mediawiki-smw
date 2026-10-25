@@ -9,7 +9,7 @@ Hardening built in:
 - Uploads are served only through `img_auth.php`, which checks read rights; Apache denies `/images` itself. Anonymous users get 403 for files, old versions and thumbnails; deleted files are never served.
 - Apache serves no server-side or version-revealing files (`/vendor`, `/maintenance`, `/tests`, `/docs`, `/cache`, `/mw-config`, `composer.*`, READMEs, release notes, extension manifests, dotfiles) and sends no version headers.
 - Each container gets only the variables it needs: the wiki never sees `DB_ROOT_PASSWORD` or `ADMIN_*`.
-- The port is published on `127.0.0.1` unless `WIKI_BIND` says otherwise, and `X-Forwarded-For` is trusted only from `WIKI_TRUSTED_PROXIES`.
+- The port is published on `127.0.0.1` unless `WIKI_BIND` says otherwise, and `X-Forwarded-For` is trusted only from `WIKI_TRUSTED_PROXIES` (for MediaWiki and for the Apache access log alike).
 - The entrypoint handles `SIGTERM` in every phase, so `docker stop` takes about a second.
 
 ## Layout
@@ -84,7 +84,7 @@ On the server, either clone the repository and create the wiki there with `new-w
 
 1. `compose.yaml`: comment out `ports:` and enable the commented Traefik block (labels, the external network); the comments there list the steps.
 2. `.env`: `WIKI_SERVER=https://<host>` (forces HTTPS and secure cookies), `WIKI_HOST=<host>`, `TRAEFIK_CERTRESOLVER`, and `TRAEFIK_NETWORK` (default `web`) and `TRAEFIK_ENTRYPOINT` (default `websecure`) if yours differ.
-3. `.env`: `WIKI_TRUSTED_PROXIES` to the Traefik network's subnet (`docker network inspect web`) or `private` (10/8, 172.16/12, 192.168/16), so real client IPs appear in RecentChanges and blocks.
+3. `.env`: `WIKI_TRUSTED_PROXIES` to the Traefik network's subnet or `private` (10/8, 172.16/12, 192.168/16). Find the subnet with `docker network inspect web --format '{{(index .IPAM.Config 0).Subnet}}'` (use your `TRAEFIK_NETWORK`'s name). The setting affects both MediaWiki (client IPs in RecentChanges, blocks, throttles) and the Apache access log (`docker compose logs wiki`), which otherwise shows only Traefik's IP. Entries are IPs/CIDRs separated by spaces or commas; an invalid entry stops the container with an error. Empty (the default) trusts no proxy, so a forged `X-Forwarded-For` is ignored.
 4. `.env`: `WIKI_IMAGE=ghcr.io/<owner>/<repo>` with the floating `WIKI_TAG=1.46-smw7.3`.
 5. `docker compose pull && docker compose up -d`, then schedule `scripts/backup.sh <name>` nightly with off-site copies.
 

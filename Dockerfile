@@ -21,7 +21,7 @@ ARG ROBOTO_VERSION=5.3.0
 ARG ROBOTO_SHA256=77620f437249772e381698224ea1bddd01c985ecd60267a63ddc96b9eb9348f7
 # Bump for image changes the versions above do not show (PHP settings, entrypoint, ...). It is the
 # r<N> in the image tag and part of the recipe below, so the entrypoint runs update.php once.
-ARG IMAGE_REVISION=5
+ARG IMAGE_REVISION=6
 
 # python3: SyntaxHighlight; GMP: fast big-number math for OATHAuth (WebAuthn/passkeys).
 # Composer extensions (exact versions): `composer update` re-resolves the whole vendor/ directory, so
@@ -85,6 +85,13 @@ COPY docker/theme.css theme/theme.css
 COPY docker/robots.txt robots.txt
 # Uploads only through img_auth.php, no server-side or version files over HTTP, no version headers
 COPY docker/apache-wiki.conf /etc/apache2/conf-enabled/wiki.conf
+
+# Access log with the real client IP. mod_remoteip (configured by the entrypoint from
+# WIKI_TRUSTED_PROXIES) replaces the peer address with the client behind a trusted proxy; %a is that
+# address, while the stock %h would still print the peer. The vhost logs with the "combined" format.
+RUN a2enmod remoteip \
+ && sed -i 's/^LogFormat "%h %l %u %t \\"%r\\" %>s %O \\"%{Referer}i\\" \\"%{User-Agent}i\\"" combined$/LogFormat "%a %l %u %t \\"%r\\" %>s %O \\"%{Referer}i\\" \\"%{User-Agent}i\\"" combined/' /etc/apache2/apache2.conf \
+ && grep -q '^LogFormat "%a .* combined$' /etc/apache2/apache2.conf
 
 # The MediaWiki configuration is part of the image, so a wiki folder (compose.yaml, .env, branding/,
 # settings.php) runs without a checkout of this repository. A wiki's settings.php is mounted over the

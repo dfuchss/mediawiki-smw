@@ -28,8 +28,9 @@ because it still needs these steps:
 1. `compose.yaml`: comment out `ports:` and enable the Traefik block (`networks:` and `labels:` of
    the wiki, and the top-level `networks:`); see the comments there. Defaults: network `web`,
    entrypoint `websecure`.
-2. `.env`: set `TRAEFIK_CERTRESOLVER` and `WIKI_TRUSTED_PROXIES` (the Traefik network's subnet, or
-   `private`); check `WIKI_SERVER`/`WIKI_HOST`, `WIKI_IMAGE`/`WIKI_TAG` (`ghcr.io/<owner>/<repo>` with
+2. `.env`: set `TRAEFIK_CERTRESOLVER` and `WIKI_TRUSTED_PROXIES` (the Traefik network's subnet, from
+   `docker network inspect web --format '{{(index .IPAM.Config 0).Subnet}}'`, or `private`; MediaWiki
+   and the Apache access log then show real client IPs); check `WIKI_SERVER`/`WIKI_HOST`, `WIKI_IMAGE`/`WIKI_TAG` (`ghcr.io/<owner>/<repo>` with
    the floating tag for Watchtower), and `TRAEFIK_NETWORK`/`TRAEFIK_ENTRYPOINT` if yours differ.
 3. Logos and icons into `branding/`, extra MediaWiki settings into `settings.php`.
 4. Start it: `cd wikis/@NAME@ && docker compose up -d` (or `scripts/compose.sh @NAME@ up -d`).

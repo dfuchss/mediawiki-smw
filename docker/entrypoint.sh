@@ -9,12 +9,14 @@
 #   anything else                     passed to the base image's entrypoint unchanged (php ..., sh, ...)
 #
 # Reads:  WIKI_RECIPE (set in the image), /config/*.php (baked in, plus the mounted settings.php),
-#         DB_NAME/DB_USER/DB_PASSWORD, JOB_RUNNER_INTERVAL.
+#         DB_NAME/DB_USER/DB_PASSWORD, JOB_RUNNER_INTERVAL, WIKI_TRUSTED_PROXIES.
 # Writes: /var/lib/wiki-state/stamp and .../lock (volume or folder wiki-state). When it starts as root
 #         it also hands /var/www/html/images and /var/lib/wiki-state to www-data if they belong to
 #         someone else (a fresh bind-mounted folder is owned by root or the host user).
+#         For apache2-foreground it also (re)writes /etc/apache2/conf-enabled/zz-remoteip.conf from
+#         WIKI_TRUSTED_PROXIES, so the access log shows real client IPs.
 # Exit:   0 after `update` or a clean stop, 143 on a signal before the supervisor runs, 1 when
-#         update.php fails, the database stays unreachable, or Apache or the job loop dies (the
+#         WIKI_TRUSTED_PROXIES is invalid, update.php fails, the database stays unreachable, or Apache or the job loop dies (the
 #         restart policy then restarts the container).
 # Example: docker compose run --rm wiki update
 set -euo pipefail
@@ -77,6 +79,43 @@ ensure_data_ownership() {
     log "giving $data_dir to www-data (was $current_owner)"
     chown www-data:www-data "$data_dir" || log "warning: cannot chown $data_dir; uploads may fail"
   done
+}
+
+# Makes Apache (mod_remoteip) log the real client IP, with the same trust as MediaWiki's
+# $wgCdnServersNoPurge (config/LocalSettings.php): WIKI_TRUSTED_PROXIES is a space- or comma-separated
+# list of IPs/CIDRs, or "private" for 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16. The addresses become
+# RemoteIPInternalProxy, i.e. proxies whose X-Forwarded-For is believed (walked from the right, the
+# first address that is not a proxy is the client). Internal, not "trusted": a trusted proxy would
+# have its private client addresses discarded, and the setting is a plain list of our own proxies.
+# Empty: the file is removed and no RemoteIP directive exists, so headers are ignored and nothing can
+# be spoofed. An entry that is not an IP or CIDR (config injection, typos) exits 1: silently trusting
+# nothing or something else would be worse than not starting.
+configure_remote_ip() {
+  local remoteip_conf=/etc/apache2/conf-enabled/zz-remoteip.conf
+  local proxies entry
+  local -a entries=() valid_entries=()
+  proxies="$(printf '%s' "${WIKI_TRUSTED_PROXIES:-}" | tr ',' ' ')"
+  # read -a splits on whitespace without expanding globs
+  read -r -a entries <<< "$proxies" || true
+  if [ "${#entries[@]}" = 1 ] && [ "${entries[0]}" = private ]; then
+    entries=(10.0.0.0/8 172.16.0.0/12 192.168.0.0/16)
+  fi
+  for entry in "${entries[@]}"; do
+    # IPv4/IPv6 characters with an optional prefix length; at least one digit
+    if [[ "$entry" =~ ^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$ && "$entry" =~ [0-9] ]]; then
+      valid_entries+=("$entry")
+    else
+      log "ERROR: invalid WIKI_TRUSTED_PROXIES entry '$entry' (expected IPs/CIDRs separated by spaces or commas, or 'private')"
+      exit 1
+    fi
+  done
+  if [ "${#valid_entries[@]}" = 0 ]; then
+    rm -f "$remoteip_conf"
+    return 0
+  fi
+  printf 'RemoteIPHeader X-Forwarded-For\nRemoteIPInternalProxy %s\n' "${valid_entries[*]}" > "$remoteip_conf" \
+    || { log "ERROR: cannot write $remoteip_conf (is the container running as root?)"; exit 1; }
+  log "trusting X-Forwarded-For from: ${valid_entries[*]}"
 }
 
 # Checks the database. Exit 0: wiki installed, 1: reachable but empty (fresh volume), 2: unreachable.
@@ -157,6 +196,7 @@ case "${1:-}" in
   job-loop)               # internal: started below as its own process (visible in ps as "job-loop")
     job_loop ;;
   apache2-foreground)
+    configure_remote_ip
     locked_update auto ;;
   *)
     exec docker-php-entrypoint "$@" ;;

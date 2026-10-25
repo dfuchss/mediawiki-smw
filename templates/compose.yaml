@@ -91,8 +91,10 @@ services:
     #      WIKI_HOST=<host>, TRAEFIK_CERTRESOLVER, and if they differ from the defaults TRAEFIK_NETWORK
     #      (the external network Traefik watches; default "web") and TRAEFIK_ENTRYPOINT ("websecure");
     #   3. set WIKI_TRUSTED_PROXIES so client IPs come from Traefik's X-Forwarded-For: the subnet of
-    #      the Traefik network (`docker network inspect <TRAEFIK_NETWORK>`), or "private" for all
-    #      private networks. Leave it empty only when no proxy is in front.
+    #      the Traefik network (`docker network inspect <TRAEFIK_NETWORK> --format
+    #      '{{(index .IPAM.Config 0).Subnet}}'`), or "private" for all private networks. It also makes
+    #      the Apache access log show client IPs instead of Traefik's.
+    #      Leave it empty only when no proxy is in front.
     # Router and service are named after the compose project, so several wikis can share one Traefik.
     # One-off containers started by the scripts carry traefik.enable=false and are never routed to.
     # networks: [default, proxy]
