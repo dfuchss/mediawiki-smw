@@ -18,13 +18,23 @@ Logos and icons go into `branding/` (served without login), never as wiki upload
 
 Run it with plain `docker compose` in this folder (`docker compose ps`, `logs -f wiki`, `up -d`), or
 with the scripts from the repository root: `scripts/compose.sh @NAME@ ...`, `scripts/backup.sh @NAME@`,
-`scripts/restore.sh @NAME@ <archive>`, `scripts/smoke.sh @NAME@`.
+`scripts/restore.sh @NAME@ <archive>`.
 
-## For production
+## Next steps (production behind Traefik)
 
-1. `compose.yaml`: comment out `ports:` and enable the Traefik block (see the comments there).
-2. `.env`: `WIKI_SERVER=https://<host>`, `WIKI_HOST=<host>`, `TRAEFIK_NETWORK`, `TRAEFIK_CERTRESOLVER`
-   (and `TRAEFIK_ENTRYPOINT`), `WIKI_TRUSTED_PROXIES` (the Traefik network's subnet, or `private`).
-3. `.env`: `WIKI_IMAGE=ghcr.io/<owner>/<repo>` with the floating `WIKI_TAG` for Watchtower.
-4. Keep `WIKI_OATH_KEY` and `WIKI_SECRET_KEY` when moving the wiki (backup and restore), and run
-   `scripts/backup.sh @NAME@` nightly with off-site copies.
+With a public `WIKI_SERVER`, `scripts/new-wiki.sh` installs the wiki and then stops it (data kept),
+because it still needs these steps:
+
+1. `compose.yaml`: comment out `ports:` and enable the Traefik block (`networks:` and `labels:` of
+   the wiki, and the top-level `networks:`); see the comments there. Defaults: network `web`,
+   entrypoint `websecure`.
+2. `.env`: set `TRAEFIK_CERTRESOLVER` and `WIKI_TRUSTED_PROXIES` (the Traefik network's subnet, or
+   `private`); check `WIKI_SERVER`/`WIKI_HOST`, `WIKI_IMAGE`/`WIKI_TAG` (`ghcr.io/<owner>/<repo>` with
+   the floating tag for Watchtower), and `TRAEFIK_NETWORK`/`TRAEFIK_ENTRYPOINT` if yours differ.
+3. Logos and icons into `branding/`, extra MediaWiki settings into `settings.php`.
+4. Start it: `cd wikis/@NAME@ && docker compose up -d` (or `scripts/compose.sh @NAME@ up -d`).
+
+## Afterwards
+
+Keep `WIKI_OATH_KEY` and `WIKI_SECRET_KEY` when moving the wiki (backup and restore), and run
+`scripts/backup.sh @NAME@` nightly with off-site copies.

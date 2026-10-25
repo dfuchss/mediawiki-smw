@@ -35,6 +35,8 @@ Clone the repository once per machine. Wikis and backups live inside the clone a
 
 It asks for the name, the port on this machine the wiki is published on (`http://127.0.0.1:<port>`, the next free one from 8081, since 8080 is often taken; only for direct access, not used behind Traefik), the public URL, site name, admin user and password (generated unless you type one), language, time zone, date format, default theme, font, image and data storage, with defaults in brackets. It generates all secrets with `openssl rand`, writes the folder above, shows a summary and asks whether to install now: get the image (the default is the image this repository's workflow publishes, `ghcr.io/<owner>/<repo>:1.46-smw7.3` derived from the clone's GitHub `origin`, which is pulled; a plain name such as `mediawiki-smw:1.46-smw7.3` is built from this repository instead and is also the default when `origin` is not on GitHub), install, start, wait until healthy, and run the smoke test.
 
+After the install, a wiki with a public URL (anything but `http(s)://localhost` or `127.0.0.1`) is stopped again (`docker compose stop`; data kept), since it still needs the Traefik block in its `compose.yaml`, `TRAEFIK_CERTRESOLVER` and `WIKI_TRUSTED_PROXIES` in `.env`, and its branding. `new-wiki.sh` prints these next steps, and the wiki's `README.md` lists them; then start it with `docker compose up -d` in its folder. A localhost wiki keeps running. `--keep-running` and `--stop-after-install` override the default. A failed smoke test only prints a warning: the wiki is installed either way.
+
 Non-interactive (CI, scripts): every answer has an option, `--yes` takes defaults for the rest, and the admin password comes from `ADMIN_PASSWORD` in the environment or is generated:
 
     scripts/new-wiki.sh --yes --name team --server https://wiki.example.org --site-name "Team Wiki" \
@@ -60,7 +62,7 @@ All take the wiki name first.
 | `scripts/new-wiki.sh [options] [name]` | Create `wikis/<name>/`, optionally install it |
 | `scripts/install.sh <name>` | First install: database, admin account, `update.php`, start, wait until healthy |
 | `scripts/compose.sh <name> <args...>` | `docker compose` for that wiki, from anywhere (`ps`, `logs -f wiki`, `pull`, `up -d`) |
-| `scripts/smoke.sh <name>` | Read-only check: login page, private API, admin login, SMW |
+| `scripts/smoke.sh <name>` | Diagnostic, read-only: login page, private API, admin login, SMW. Runs curl inside the wiki container, so it needs no Traefik, DNS, TLS or published port (and does not test the public route); every request has a timeout, the wait for the wiki at most 2 minutes |
 | `scripts/backup.sh <name>` | `backups/<name>/wiki-<timestamp>.tar.gz` |
 | `scripts/restore.sh <name> [--yes] <archive>` | Replace database and uploads from a backup |
 | `scripts/list-wikis.sh` | Name, URL, port, storage mode and state of all wikis |

@@ -24,6 +24,10 @@
 #                          repository instead (also the default when origin is not on GitHub)
 #   --install | --no-install   install now or only write the files (default: install)
 #   --refresh-image        pull or rebuild the image even if it exists locally
+#   --keep-running | --stop-after-install   after install and smoke test, leave the wiki running or
+#                          stop it (docker compose stop; data kept) and print the next steps (Traefik,
+#                          .env, branding; also in wikis/<name>/README.md). Default: keep running when
+#                          WIKI_SERVER is http(s)://localhost or 127.0.0.1 (a local wiki), else stop
 #   --yes                  non-interactive: no questions, defaults for everything not given
 #   -h, --help             this help
 # The admin password is never an option (it would show up in ps): it is generated, typed in at the
@@ -36,9 +40,11 @@
 #          data/db, data/images, data/state (mode 700; the containers take over their ownership).
 #          With install: the image (pull or build), the volumes <name>_db-data, <name>_images,
 #          <name>_wiki-state (storage volumes) and the running containers.
-# Exit:    0 when the files are written (and, with install, the wiki is installed and passed
-#          smoke.sh); 1 on an invalid answer in --yes mode, on abort, or when a step fails. A failed
-#          install keeps the files, so `scripts/install.sh <name>` can be retried.
+# Exit:    0 when the files are written (and, with install, the wiki is installed and healthy); 1 on
+#          an invalid answer in --yes mode, on abort, or when a step fails. A failed install keeps the
+#          files, so `scripts/install.sh <name>` can be retried. A failed smoke test after the install
+#          only prints a warning (the wiki is installed; re-run scripts/smoke.sh <name>): CI runs
+#          smoke.sh itself.
 # Examples:
 #   scripts/new-wiki.sh
 #   ADMIN_PASSWORD=... scripts/new-wiki.sh --yes --name team --server https://wiki.example.org --no-install
@@ -353,9 +359,21 @@ set_setting() {
   SET_SETTINGS="$SET_SETTINGS $1"
 }
 
+# Returns 0 when the URL $1 points to this machine (http(s)://localhost or 127.0.0.1, any port): a
+# local wiki, reached through its published port, that needs no Traefik.
+is_local_url() {
+  [[ "$1" =~ ^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$ ]]
+}
+
+# Prints the next steps for production: the "Next steps" section of the wiki's README.md $1, without
+# its heading and the following one.
+print_next_steps() {
+  sed -n '/^## Next steps/,/^## /{ /^## /d; p; }' "$1"
+}
+
 # ---- main ------------------------------------------------------------------------------------------
 
-assume_yes=0; install_choice=""; refresh_image=0
+assume_yes=0; install_choice=""; refresh_image=0; after_install=""
 opt_name=""; opt_port=""; opt_server=""; opt_site_name=""; opt_admin_user=""; opt_lang=""
 opt_timezone=""; opt_date_format=""; opt_theme=""; opt_font=""; opt_image=""; opt_storage=""
 # The answers, set by ask
@@ -369,6 +387,8 @@ while [ $# -gt 0 ]; do
     --install) install_choice=yes; shift; continue ;;
     --no-install) install_choice=no; shift; continue ;;
     --refresh-image) refresh_image=1; shift; continue ;;
+    --keep-running) after_install=keep; shift; continue ;;
+    --stop-after-install) after_install=stop; shift; continue ;;
     --name|--port|--server|--site-name|--admin-user|--lang|--timezone|--date-format|--theme|--font|--image|--storage)
       [ $# -ge 2 ] || die "$1 needs a value"
       case "$1" in
@@ -407,6 +427,9 @@ ask storage_mode "Data storage: volumes (Docker-managed) or folders (wikis/$wiki
 WIKI_IMAGE="${image_ref%:*}"
 WIKI_TAG="${image_ref##*:}"
 wiki_host="${wiki_server#*://}"; wiki_host="${wiki_host%%:*}"
+if [ -z "$after_install" ]; then
+  if is_local_url "$wiki_server"; then after_install=keep; else after_install=stop; fi
+fi
 
 # 1. Settings; the secrets come from openssl rand (hex, so they never need quoting)
 set_setting COMPOSE_PROJECT_NAME "$wiki_name"
@@ -477,6 +500,7 @@ ${data_line:+$data_line
   Locale      $wiki_lang, $wiki_timezone, $date_format; theme $default_theme; font $wiki_font
   Image       $WIKI_IMAGE:$WIKI_TAG   ($image_action if missing)
   Storage     $storage_description
+  Afterwards  $( [ "$after_install" = keep ] && echo "keep running" || echo "stop; then set up Traefik (next steps in README.md)")
 EOF
 
 # 3. Install now?
@@ -496,14 +520,30 @@ if [ "$refresh_image" != 1 ] && docker image inspect "$WIKI_IMAGE:$WIKI_TAG" > /
 fi
 if [ "$refresh_image" = 1 ]; then ensure_image refresh; else ensure_image; fi
 "$REPO_ROOT/scripts/install.sh" "$wiki_name"
-"$REPO_ROOT/scripts/smoke.sh" "$wiki_name"
+# The smoke test talks to the container and should pass, but a failure must not hide that the wiki is
+# installed: warn, and go on (CI runs smoke.sh itself)
+if ! "$REPO_ROOT/scripts/smoke.sh" "$wiki_name"; then
+  echo >&2
+  echo "WARNING: the wiki is installed, but the smoke test failed (see SMOKE FAIL above)." >&2
+  echo "  Re-run it later:  scripts/smoke.sh $wiki_name" >&2
+  echo "  Wiki logs:        scripts/compose.sh $wiki_name logs wiki" >&2
+fi
 
 echo
-echo "Wiki '$wiki_name' is running: $wiki_server"
+if [ "$after_install" = keep ]; then
+  echo "Wiki '$wiki_name' is running: $wiki_server"
+else
+  # stop, not down: containers and data stay, `up -d` brings the wiki back as it is
+  "$REPO_ROOT/scripts/compose.sh" "$wiki_name" stop
+  echo
+  echo "Wiki '$wiki_name' is installed and stopped (data kept). It will be at: $wiki_server"
+  echo "Next steps (also in wikis/$wiki_name/README.md):"
+  print_next_steps "$wiki_dir/README.md"
+fi
 echo "  Log in as:  $admin_user"
 if [ "$password_origin" = generated ]; then
   echo "  Password:   $admin_password   (generated; also ADMIN_PASSWORD in wikis/$wiki_name/.env)"
 else
-  echo "  Password:   the one you $( [ "$password_origin" = entered ] && echo entered || echo passed in ADMIN_PASSWORD)"
+  echo "  Password:   the one you $( [ "$password_origin" = entered ] && echo entered || echo passed in ADMIN_PASSWORD) (also ADMIN_PASSWORD in wikis/$wiki_name/.env)"
 fi
 echo "  Manage:     cd wikis/$wiki_name && docker compose ps   (or scripts/compose.sh $wiki_name ps)"

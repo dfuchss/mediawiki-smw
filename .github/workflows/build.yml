@@ -162,6 +162,8 @@ jobs:
   # Install the freshly built amd64 image (rebuilt from the build job's cache) as throwaway wikis
   # created by scripts/new-wiki.sh in non-interactive mode, so the wiki generator, install.sh and
   # smoke.sh are tested together: login page, private API, admin login, SMW. Publishing waits for it.
+  # new-wiki.sh only warns when its smoke test fails, so smoke.sh runs again as its own step, which
+  # fails the job. The wikis have localhost URLs and keep running anyway; --keep-running says so.
   smoke:
     needs: [prepare, build]
     runs-on: ubuntu-24.04
@@ -180,11 +182,15 @@ jobs:
           load: true
           cache-from: type=gha,scope=linux/amd64
       - name: Create, install and smoke-test a throwaway wiki
-        run: scripts/new-wiki.sh --yes --name ci --site-name "CI Wiki" --image mediawiki-smw:smoke
+        run: |
+          scripts/new-wiki.sh --yes --keep-running --name ci --site-name "CI Wiki" --image mediawiki-smw:smoke
+          scripts/smoke.sh ci
       # Same again with bind-mounted data folders: on this Linux runner the containers must take over
       # the root-owned folders (MySQL's entrypoint, ours for uploads and state)
       - name: Create, install and smoke-test a throwaway wiki with data folders
-        run: scripts/new-wiki.sh --yes --name ci-dir --storage folders --site-name "CI Wiki" --image mediawiki-smw:smoke
+        run: |
+          scripts/new-wiki.sh --yes --keep-running --name ci-dir --storage folders --site-name "CI Wiki" --image mediawiki-smw:smoke
+          scripts/smoke.sh ci-dir
       - if: failure()
         run: |
           scripts/compose.sh ci logs --no-color
