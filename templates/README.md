@@ -20,6 +20,11 @@ Run it with plain `docker compose` in this folder (`docker compose ps`, `logs -f
 with the scripts from the repository root: `scripts/compose.sh @NAME@ ...`, `scripts/backup.sh @NAME@`,
 `scripts/restore.sh @NAME@ <archive>`.
 
+The visual editor (VisualEditor) is on by default: "Edit" opens it, "Edit source" the wikitext editor.
+Set `WIKI_VISUAL_EDITOR=off` in `.env` and run `docker compose up -d` to turn it off (only "Edit"
+remains). PageForms form fields do not get the visual editor; that needs the separate VEForAll
+extension, which this stack does not include.
+
 ## Next steps (production behind Traefik)
 
 With a public `WIKI_SERVER`, `scripts/new-wiki.sh` installs the wiki and then stops it (data kept),

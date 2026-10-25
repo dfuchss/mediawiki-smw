@@ -16,6 +16,7 @@
 #   --date-format <fmt>    dmy, mdy, ymd or "ISO 8601" (default: dmy)
 #   --theme <theme>        os, day or night (default: os)
 #   --font <font>          roboto or default (default: roboto)
+#   --visual-editor <on|off>   VisualEditor next to the wikitext editor (default: on)
 #   --storage <mode>       volumes (Docker named volumes, default) or folders (bind mounts to
 #                          wikis/<name>/data/db, images and state)
 #   --image <image:tag>    default: the image the GitHub Actions workflow publishes for this clone,
@@ -170,6 +171,11 @@ validate_theme() {
 validate_font() {
   case "$1" in roboto|default) return 0 ;; esac
   echo "  One of: roboto, default." >&2; return 1
+}
+
+validate_visual_editor() {
+  case "$1" in on|off) return 0 ;; esac
+  echo "  One of: on, off." >&2; return 1
 }
 
 validate_storage() {
@@ -375,10 +381,10 @@ print_next_steps() {
 
 assume_yes=0; install_choice=""; refresh_image=0; after_install=""
 opt_name=""; opt_port=""; opt_server=""; opt_site_name=""; opt_admin_user=""; opt_lang=""
-opt_timezone=""; opt_date_format=""; opt_theme=""; opt_font=""; opt_image=""; opt_storage=""
+opt_timezone=""; opt_date_format=""; opt_theme=""; opt_font=""; opt_visual_editor=""; opt_image=""; opt_storage=""
 # The answers, set by ask
 wiki_name=""; wiki_port=""; wiki_server=""; site_name=""; admin_user=""; wiki_lang=""
-wiki_timezone=""; date_format=""; default_theme=""; wiki_font=""; image_ref=""; storage_mode=""
+wiki_timezone=""; date_format=""; default_theme=""; wiki_font=""; visual_editor=""; image_ref=""; storage_mode=""
 admin_password=""; password_origin=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -389,7 +395,7 @@ while [ $# -gt 0 ]; do
     --refresh-image) refresh_image=1; shift; continue ;;
     --keep-running) after_install=keep; shift; continue ;;
     --stop-after-install) after_install=stop; shift; continue ;;
-    --name|--port|--server|--site-name|--admin-user|--lang|--timezone|--date-format|--theme|--font|--image|--storage)
+    --name|--port|--server|--site-name|--admin-user|--lang|--timezone|--date-format|--theme|--font|--visual-editor|--image|--storage)
       [ $# -ge 2 ] || die "$1 needs a value"
       case "$1" in
         --name) opt_name="$2" ;;          --port) opt_port="$2" ;;
@@ -398,6 +404,7 @@ while [ $# -gt 0 ]; do
         --timezone) opt_timezone="$2" ;;  --date-format) opt_date_format="$2" ;;
         --theme) opt_theme="$2" ;;        --font) opt_font="$2" ;;
         --image) opt_image="$2" ;;        --storage) opt_storage="$2" ;;
+        --visual-editor) opt_visual_editor="$2" ;;
       esac
       shift 2 ;;
     -*) echo "Unknown option: $1" >&2; usage 1 ;;
@@ -420,6 +427,7 @@ ask wiki_timezone "Time zone" "UTC" validate_timezone "$opt_timezone"
 ask date_format "Date format (dmy, mdy, ymd, ISO 8601)" "dmy" validate_date_format "$opt_date_format"
 ask default_theme "Default theme (os, day, night)" "os" validate_theme "$opt_theme"
 ask wiki_font "Font (roboto, default)" "roboto" validate_font "$opt_font"
+ask visual_editor "Visual editor (on, off)" "on" validate_visual_editor "$opt_visual_editor"
 ask image_ref "Image (ghcr.io/... is pulled; a plain name such as mediawiki-smw:<tag> is built from this repository)" "$(default_image)" validate_image "$opt_image"
 ask storage_mode "Data storage: volumes (Docker-managed) or folders (wikis/$wiki_name/data/...)" "volumes" validate_storage "$opt_storage"
 
@@ -441,6 +449,7 @@ set_setting WIKI_TIMEZONE "$wiki_timezone"
 set_setting WIKI_DATE_FORMAT "$date_format"
 set_setting WIKI_DEFAULT_THEME "$default_theme"
 set_setting WIKI_FONT "$wiki_font"
+set_setting WIKI_VISUAL_EDITOR "$visual_editor"
 set_setting WIKI_IMAGE "$WIKI_IMAGE"
 set_setting WIKI_TAG "$WIKI_TAG"
 set_setting WIKI_PORT "$wiki_port"
@@ -497,7 +506,7 @@ ${data_line:+$data_line
   URL         $wiki_server   (port $wiki_port on 127.0.0.1)
   Site name   $site_name
   Admin       $admin_user   (password $password_origin; ADMIN_PASSWORD in .env)
-  Locale      $wiki_lang, $wiki_timezone, $date_format; theme $default_theme; font $wiki_font
+  Locale      $wiki_lang, $wiki_timezone, $date_format; theme $default_theme; font $wiki_font; visual editor $visual_editor
   Image       $WIKI_IMAGE:$WIKI_TAG   ($image_action if missing)
   Storage     $storage_description
   Afterwards  $( [ "$after_install" = keep ] && echo "keep running" || echo "stop; then set up Traefik (next steps in README.md)")

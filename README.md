@@ -1,6 +1,6 @@
 # MediaWiki + Semantic MediaWiki on Docker Compose
 
-A reusable stack for private wikis: MediaWiki 1.46, Semantic MediaWiki 7.3, SemanticResultFormats, PageForms, HeaderTabs, CodeMirror, optional two-factor authentication (OATHAuth with passkeys) and MySQL 8.4. Two containers per wiki (`db`, `wiki`). Wikis are private: login required to read, no self-registration, no mail unless SMTP is configured.
+A reusable stack for private wikis: MediaWiki 1.46, Semantic MediaWiki 7.3, SemanticResultFormats, PageForms, HeaderTabs, CodeMirror, VisualEditor (switchable per wiki), optional two-factor authentication (OATHAuth with passkeys) and MySQL 8.4. Two containers per wiki (`db`, `wiki`). Wikis are private: login required to read, no self-registration, no mail unless SMTP is configured.
 
 The image contains the extensions, the MediaWiki configuration (`config/`), a self-hosted Roboto font and an entrypoint that runs `update.php` once per new image or configuration (under a lock), then supervises Apache and the job queue loop. It contains no wiki-specific settings, branding or data.
 
@@ -33,7 +33,7 @@ Clone the repository once per machine. Wikis and backups live inside the clone a
 
     scripts/new-wiki.sh
 
-It asks for the name, the port on this machine the wiki is published on (`http://127.0.0.1:<port>`, the next free one from 8081, since 8080 is often taken; only for direct access, not used behind Traefik), the public URL, site name, admin user and password (generated unless you type one), language, time zone, date format, default theme, font, image and data storage, with defaults in brackets. It generates all secrets with `openssl rand`, writes the folder above, shows a summary and asks whether to install now: get the image (the default is the image this repository's workflow publishes, `ghcr.io/<owner>/<repo>:1.46-smw7.3` derived from the clone's GitHub `origin`, which is pulled; a plain name such as `mediawiki-smw:1.46-smw7.3` is built from this repository instead and is also the default when `origin` is not on GitHub), install, start, wait until healthy, and run the smoke test.
+It asks for the name, the port on this machine the wiki is published on (`http://127.0.0.1:<port>`, the next free one from 8081, since 8080 is often taken; only for direct access, not used behind Traefik), the public URL, site name, admin user and password (generated unless you type one), language, time zone, date format, default theme, font, visual editor, image and data storage, with defaults in brackets. It generates all secrets with `openssl rand`, writes the folder above, shows a summary and asks whether to install now: get the image (the default is the image this repository's workflow publishes, `ghcr.io/<owner>/<repo>:1.46-smw7.3` derived from the clone's GitHub `origin`, which is pulled; a plain name such as `mediawiki-smw:1.46-smw7.3` is built from this repository instead and is also the default when `origin` is not on GitHub), install, start, wait until healthy, and run the smoke test.
 
 After the install, a wiki with a public URL (anything but `http(s)://localhost` or `127.0.0.1`) is stopped again (`docker compose stop`; data kept), since it still needs the Traefik block in its `compose.yaml`, `TRAEFIK_CERTRESOLVER` and `WIKI_TRUSTED_PROXIES` in `.env`, and its branding. `new-wiki.sh` prints these next steps, and the wiki's `README.md` lists them; then start it with `docker compose up -d` in its folder. A localhost wiki keeps running. `--keep-running` and `--stop-after-install` override the default. A failed smoke test only prints a warning: the wiki is installed either way.
 
@@ -74,9 +74,15 @@ The scripts stop with a clear message when a required setting is missing, run wi
 
 Logos and icons go into `branding/` (served at `/branding/...` without login), never as wiki uploads referenced in `$wgLogos`/`$wgFavicon`: uploads need a login and would be missing on the login page.
 
-The settings are in the wiki's `.env` (commented; template `templates/wiki.env`): URL, name, language, time zone, date format, theme, font, image and tag, port and bind address, DB and secret keys, admin account, job loop interval, SMTP, Traefik values, trusted proxies. Apply changes with `docker compose up -d`. Anything else goes into `settings.php`; a change there runs `update.php` once on the next start, because it is part of the update stamp.
+The settings are in the wiki's `.env` (commented; template `templates/wiki.env`): URL, name, language, time zone, date format, theme, font, visual editor (`WIKI_VISUAL_EDITOR`), image and tag, port and bind address, DB and secret keys, admin account, job loop interval, SMTP, Traefik values, trusted proxies. Apply changes with `docker compose up -d`. Anything else goes into `settings.php`; a change there runs `update.php` once on the next start, because it is part of the update stamp.
 
 Page URLs are short, `/wiki/<page>` (Apache hands `/wiki/...` to `index.php`, which checks read rights as for every request). `/index.php/<page>` and `/index.php?title=<page>` keep working, so older links do not break. To switch back to `/index.php/<page>` URLs, set `WIKI_ARTICLE_PATH=/index.php` in `.env` (a wiki folder created before this setting existed also needs `WIKI_ARTICLE_PATH: ${WIKI_ARTICLE_PATH:-/wiki}` in the wiki's `environment:` in `compose.yaml`) and run `docker compose up -d`.
+
+### Visual editor
+
+VisualEditor (bundled with MediaWiki, with Parsoid in core) is on by default: pages show two tabs, "Edit" (visual, `?veaction=edit`) and "Edit source" (wikitext, `?action=edit`), in the main, user, `Wiki:` (project) and help namespaces (plus File and Category). Parsoid runs inside the PHP request, so there is no extra service; the editor talks to `api.php` with the user's session cookie, which is why it works on the private wiki (anonymous requests get `readapidenied`). Semantic MediaWiki annotations such as `[[Has x::y]]` survive a round trip. Not included: PageForms form fields cannot use the visual editor without the separate VEForAll extension.
+
+`new-wiki.sh --visual-editor on|off` (or the question) writes `WIKI_VISUAL_EDITOR` to `.env`. An empty or missing value means on, so existing wikis get the editor with the new image without changes. To turn it off for an existing wiki, add `WIKI_VISUAL_EDITOR: ${WIKI_VISUAL_EDITOR:-on}` to the `environment:` of the `wiki` service in its `compose.yaml`, set `WIKI_VISUAL_EDITOR=off` in `.env` and run `docker compose up -d`.
 
 ## Production
 
