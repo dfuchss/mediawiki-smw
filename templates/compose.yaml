@@ -42,6 +42,7 @@ services:
       WIKI_DATE_FORMAT: ${WIKI_DATE_FORMAT:-dmy}
       WIKI_DEFAULT_THEME: ${WIKI_DEFAULT_THEME:-os}
       WIKI_FONT: ${WIKI_FONT:-roboto}
+      WIKI_ARTICLE_PATH: ${WIKI_ARTICLE_PATH:-/wiki}
       WIKI_DEBUG: ${WIKI_DEBUG:-0}
       DB_NAME: ${DB_NAME:-wiki}
       DB_USER: ${DB_USER:-wiki}

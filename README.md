@@ -75,6 +75,8 @@ Logos and icons go into `branding/` (served at `/branding/...` without login), n
 
 The settings are in the wiki's `.env` (commented; template `templates/wiki.env`): URL, name, language, time zone, date format, theme, font, image and tag, port and bind address, DB and secret keys, admin account, job loop interval, SMTP, Traefik values, trusted proxies. Apply changes with `docker compose up -d`. Anything else goes into `settings.php`; a change there runs `update.php` once on the next start, because it is part of the update stamp.
 
+Page URLs are short, `/wiki/<page>` (Apache hands `/wiki/...` to `index.php`, which checks read rights as for every request). `/index.php/<page>` and `/index.php?title=<page>` keep working, so older links do not break. To switch back to `/index.php/<page>` URLs, set `WIKI_ARTICLE_PATH=/index.php` in `.env` (a wiki folder created before this setting existed also needs `WIKI_ARTICLE_PATH: ${WIKI_ARTICLE_PATH:-/wiki}` in the wiki's `environment:` in `compose.yaml`) and run `docker compose up -d`.
+
 ## Production
 
 On the server, either clone the repository and create the wiki there with `new-wiki.sh`, or copy a wiki folder (it needs nothing else at runtime; for backups the scripts need the clone). Then edit:

@@ -6,6 +6,10 @@ $wgMetaNamespace = 'Wiki';   # project namespace "Wiki:" ("Project:" stays an al
 $wgScriptPath = '';
 $wgServer = rtrim( getenv( 'WIKI_SERVER' ) ?: 'http://localhost:8080', '/' );
 $wgLanguageCode = getenv( 'WIKI_LANG' ) ?: 'en';   # fixed at install; changing it later is hard
+# Short URLs: pages at /wiki/<page> (docker/apache-wiki.conf hands /wiki and everything below it to
+# index.php). WIKI_ARTICLE_PATH=/index.php switches back to /index.php/<page>. Either way the other
+# forms keep working: /index.php/<page> ($wgUsePathInfo) and /index.php?title=<page>.
+$wgArticlePath = rtrim( getenv( 'WIKI_ARTICLE_PATH' ) ?: '/wiki', '/' ) . '/$1';
 $wgUsePathInfo = true;
 $wgDefaultSkin = 'vector-2022';
 
