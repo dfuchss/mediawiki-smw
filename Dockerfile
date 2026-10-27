@@ -7,7 +7,7 @@ ARG MW_VERSION
 # renovate: datasource=packagist depName=mediawiki/semantic-media-wiki
 ARG SMW_VERSION=7.3.1
 # renovate: datasource=packagist depName=mediawiki/semantic-result-formats
-ARG SRF_VERSION=6.0.0
+ARG SRF_VERSION=6.0.1
 # Git extensions, pinned by commit. PageForms follows its release tags: REL1_46 (6.0.5) still calls
 # an SMW API that SMW 7 removed ("Fix support for SMW 7" is in 6.0.11). The others follow REL1_46.
 # renovate: datasource=git-tags depName=PageForms packageName=https://github.com/wikimedia/mediawiki-extensions-PageForms version=6.0.11
