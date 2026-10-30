@@ -15,7 +15,7 @@ ARG PAGEFORMS_SHA=88ad8f1805a11bb1c693ddd9e5311b059593344f
 # renovate: datasource=git-refs depName=HeaderTabs packageName=https://github.com/wikimedia/mediawiki-extensions-HeaderTabs branch=REL1_46
 ARG HEADERTABS_SHA=26298a7464d1c13d015701e32db73d80af0a9242
 # renovate: datasource=git-refs depName=CodeMirror packageName=https://github.com/wikimedia/mediawiki-extensions-CodeMirror branch=REL1_46
-ARG CODEMIRROR_SHA=587cc3fa0fe2d0a9ef25f1ab2e3c1ee4f27fac79
+ARG CODEMIRROR_SHA=82fb432a9997b422ef8ba6c7086fc6832c00d5db
 # Roboto webfont (self-hosted, see the font step below); bump version and checksum together
 ARG ROBOTO_VERSION=5.3.0
 ARG ROBOTO_SHA256=77620f437249772e381698224ea1bddd01c985ecd60267a63ddc96b9eb9348f7
