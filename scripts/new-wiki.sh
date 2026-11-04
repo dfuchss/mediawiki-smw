@@ -21,7 +21,7 @@
 #                          wikis/<name>/data/db, images and state)
 #   --image <image:tag>    default: the image the GitHub Actions workflow publishes for this clone,
 #                          ghcr.io/<owner>/<repo>:<tag> from the origin remote (see default_image), which
-#                          is pulled; a plain name such as mediawiki-smw:1.46-smw7.3 is built from this
+#                          is pulled; a plain name such as mediawiki-smw:1.46-smw7.4 is built from this
 #                          repository instead (also the default when origin is not on GitHub)
 #   --install | --no-install   install now or only write the files (default: install)
 #   --refresh-image        pull or rebuild the image even if it exists locally
@@ -185,7 +185,7 @@ validate_storage() {
 
 validate_image() {
   [[ "$1" =~ ^[a-z0-9][a-z0-9._/:-]*:[A-Za-z0-9._-]+$ ]] && [[ "${1##*/}" == *:* ]] \
-    || { echo "  Use <image>:<tag>, e.g. mediawiki-smw:1.46-smw7.3 or ghcr.io/<owner>/<repo>:1.46-smw7.3." >&2; return 1; }
+    || { echo "  Use <image>:<tag>, e.g. mediawiki-smw:1.46-smw7.4 or ghcr.io/<owner>/<repo>:1.46-smw7.4." >&2; return 1; }
 }
 
 validate_password() {
