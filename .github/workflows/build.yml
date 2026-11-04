@@ -1,6 +1,6 @@
 # Builds the wiki image for amd64 and arm64, smoke-tests the amd64 image (new-wiki.sh: install + smoke.sh)
 # and only then publishes it to GHCR as ghcr.io/<owner>/<repo>:
-#   <MW>-smw<SMW>-<run number>[.<attempt>]   immutable (pin it to roll back), e.g. 1.46.2-smw7.3.1-42
+#   <MW>-smw<SMW>-<run number>[.<attempt>]   immutable (pin it to roll back), e.g. 1.46.2-smw7.4.1-42
 #   <MW minor>-smw<SMW minor>, <MW minor>                      floating (Watchtower follows the first)
 # A re-run gets its own immutable tag (".<attempt>" from the second attempt on), and the merge job
 # refuses to push when the immutable tag already exists: a published one is never overwritten.

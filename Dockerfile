@@ -5,7 +5,7 @@ FROM mediawiki:${MW_VERSION}
 
 ARG MW_VERSION
 # renovate: datasource=packagist depName=mediawiki/semantic-media-wiki
-ARG SMW_VERSION=7.3.1
+ARG SMW_VERSION=7.4.0
 # renovate: datasource=packagist depName=mediawiki/semantic-result-formats
 ARG SRF_VERSION=6.0.1
 # Git extensions, pinned by commit. PageForms follows its release tags: REL1_46 (6.0.5) still calls
@@ -21,7 +21,7 @@ ARG ROBOTO_VERSION=5.3.0
 ARG ROBOTO_SHA256=77620f437249772e381698224ea1bddd01c985ecd60267a63ddc96b9eb9348f7
 # Bump for image changes the versions above do not show (PHP settings, entrypoint, ...). It is part
 # of the recipe below, so the entrypoint runs update.php once (the image tag uses the CI build number).
-ARG IMAGE_REVISION=7
+ARG IMAGE_REVISION=0
 
 # python3: SyntaxHighlight; GMP: fast big-number math for OATHAuth (WebAuthn/passkeys).
 # Composer extensions (exact versions): `composer update` re-resolves the whole vendor/ directory, so
