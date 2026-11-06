@@ -13,7 +13,7 @@ ARG SRF_VERSION=6.0.1
 # renovate: datasource=git-tags depName=PageForms packageName=https://github.com/wikimedia/mediawiki-extensions-PageForms version=6.0.11
 ARG PAGEFORMS_SHA=88ad8f1805a11bb1c693ddd9e5311b059593344f
 # renovate: datasource=git-refs depName=HeaderTabs packageName=https://github.com/wikimedia/mediawiki-extensions-HeaderTabs branch=REL1_46
-ARG HEADERTABS_SHA=26298a7464d1c13d015701e32db73d80af0a9242
+ARG HEADERTABS_SHA=63d9065c04cb65fb615ece338e92737d37e01b1a
 # renovate: datasource=git-refs depName=CodeMirror packageName=https://github.com/wikimedia/mediawiki-extensions-CodeMirror branch=REL1_46
 ARG CODEMIRROR_SHA=82fb432a9997b422ef8ba6c7086fc6832c00d5db
 # Roboto webfont (self-hosted, see the font step below); bump version and checksum together
