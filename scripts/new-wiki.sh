@@ -268,7 +268,7 @@ default_image() {
   local template_image template_tag origin_url owner_and_repo
   template_image="$(sed -n 's/^WIKI_IMAGE=//p' "$TEMPLATES_DIR/wiki.env")"
   template_tag="$(sed -n 's/^WIKI_TAG=//p' "$TEMPLATES_DIR/wiki.env")"
-  origin_url="$(git -C "$REPO_ROOT" remote get-url origin 2> /dev/null || true)"
+  origin_url="$(git -C "$REPO_ROOT_HOST" remote get-url origin 2> /dev/null || true)"
   # git@github.com:owner/repo.git, https://github.com/owner/repo(.git), ssh://git@github.com/owner/repo
   owner_and_repo="$(printf '%s\n' "$origin_url" | sed -n 's#^.*github\.com[:/]\([^/]*/[^/]*\)$#\1#p')"
   owner_and_repo="${owner_and_repo%.git}"

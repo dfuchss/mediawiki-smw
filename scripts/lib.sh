@@ -4,8 +4,9 @@
 # Usage (in a script):  . "$(dirname "$0")/lib.sh"; load_wiki "${1:-}"; shift
 #
 # Provides:
-#   REPO_ROOT, WIKIS_DIR (REPO_ROOT/wikis), BACKUPS_DIR (REPO_ROOT/backups)
-#   die, is_valid_wiki_name, wiki_storage_mode, ensure_image, load_wiki
+#   REPO_ROOT, REPO_ROOT_HOST (REPO_ROOT for docker and git), WIKIS_DIR (REPO_ROOT/wikis),
+#   BACKUPS_DIR (REPO_ROOT/backups)
+#   die, host_path, is_valid_wiki_name, wiki_storage_mode, ensure_image, load_wiki
 #   after load_wiki: WIKI_NAME_ARG, WIKI_DIR, every variable of the wiki's .env (exported), and the
 #   command arrays COMPOSE (docker compose for this wiki) and RUN_ONE_OFF (compose run for one-off
 #   containers)
@@ -19,6 +20,20 @@ set -euo pipefail
 umask 077
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Git Bash / MSYS2 on Windows rewrites every argument and environment value that looks like a Unix
+# path when it starts a Windows program such as docker.exe: WIKI_ARTICLE_PATH=/wiki from .env would
+# reach the container as "C:/Program Files/Git/wiki" (every /wiki/<page> URL fails), and container
+# paths in arguments (/var/www/html/images, the smoke test's /tmp cookie jar) would break too. So the
+# conversion is off, and host paths given to docker or git go through host_path (D:/... there).
+# MSYS tools such as tar keep the /d/... form: they read "D:/x" as a remote host "D".
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' MSYS2_ENV_CONV_EXCL='*'
+                        host_path() { cygpath -m "$1"; } ;;
+  *)                    host_path() { printf '%s\n' "$1"; } ;;
+esac
+# REPO_ROOT as docker and git expect it (the same path except on Windows)
+REPO_ROOT_HOST="$(host_path "$REPO_ROOT")"
 WIKIS_DIR="$REPO_ROOT/wikis"
 # shellcheck disable=SC2034  # used by the scripts that source this file
 BACKUPS_DIR="$REPO_ROOT/backups"
@@ -54,7 +69,7 @@ ensure_image() {
   fi
   case "$WIKI_IMAGE" in
     */*) echo "Pulling $image_ref"; docker pull "$image_ref" ;;
-    *)   echo "Building $image_ref from $REPO_ROOT"; docker build --pull -t "$image_ref" "$REPO_ROOT" ;;
+    *)   echo "Building $image_ref from $REPO_ROOT"; docker build --pull -t "$image_ref" "$REPO_ROOT_HOST" ;;
   esac
 }
 
@@ -85,8 +100,10 @@ load_wiki() {
   [ "$COMPOSE_PROJECT_NAME" = "$wiki_name" ] \
     || die "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME in $WIKI_DIR/.env must equal the folder name '$wiki_name'"
 
-  COMPOSE=(docker compose --project-directory "$WIKI_DIR" -p "$wiki_name"
-           -f "$WIKI_DIR/compose.yaml" --env-file "$WIKI_DIR/.env")
+  local wiki_dir_host
+  wiki_dir_host="$(host_path "$WIKI_DIR")"
+  COMPOSE=(docker compose --project-directory "$wiki_dir_host" -p "$wiki_name"
+           -f "$wiki_dir_host/compose.yaml" --env-file "$wiki_dir_host/.env")
   # One-off containers (install, backup, restore) must never be registered as Traefik backends
   # shellcheck disable=SC2034  # used by the scripts that source this file
   RUN_ONE_OFF=("${COMPOSE[@]}" run --rm -l traefik.enable=false)

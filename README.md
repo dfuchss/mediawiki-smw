@@ -14,7 +14,7 @@ Hardening built in:
 
 ## Layout
 
-Clone the repository once per machine. Wikis and backups live inside the clone and are ignored by git (and by the Docker build context):
+Clone the repository once per machine (on Windows with `git clone -c core.autocrlf=false`, so the scripts keep LF line endings; run them from Git Bash). Wikis and backups live inside the clone and are ignored by git (and by the Docker build context):
 
     wikis/<name>/
       .env            settings and secrets (mode 600)

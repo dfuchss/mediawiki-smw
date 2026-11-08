@@ -100,27 +100,27 @@ running_image_description() {
 # runs again from the updated file (bash reads scripts while running them).
 determine_main_tag() {
   local main_ref=origin/main behind_count template_tag
-  if ! GIT_TERMINAL_PROMPT=0 git -C "$REPO_ROOT" fetch --quiet origin main < /dev/null 2> /dev/null; then
+  if ! GIT_TERMINAL_PROMPT=0 git -C "$REPO_ROOT_HOST" fetch --quiet origin main < /dev/null 2> /dev/null; then
     echo "WARNING: git fetch origin main failed (offline?); using the last fetched state." >&2
   fi
-  if ! git -C "$REPO_ROOT" rev-parse --verify --quiet "$main_ref" > /dev/null; then
+  if ! git -C "$REPO_ROOT_HOST" rev-parse --verify --quiet "$main_ref" > /dev/null; then
     echo "WARNING: no origin/main; using this checkout." >&2
     main_ref=HEAD
   fi
-  behind_count="$(git -C "$REPO_ROOT" rev-list --count "HEAD..$main_ref")"
+  behind_count="$(git -C "$REPO_ROOT_HOST" rev-list --count "HEAD..$main_ref")"
   if [ "$behind_count" -gt 0 ]; then
     echo "This clone is $behind_count commit(s) behind origin/main (scripts and templates; the wiki's own files are never touched)."
-    if [ "$git_pull_allowed" = 1 ] && [ "$(git -C "$REPO_ROOT" symbolic-ref --short -q HEAD)" = main ] \
+    if [ "$git_pull_allowed" = 1 ] && [ "$(git -C "$REPO_ROOT_HOST" symbolic-ref --short -q HEAD)" = main ] \
        && confirm "Update it with git pull --ff-only first?" y; then
-      git -C "$REPO_ROOT" pull --ff-only --quiet origin main || die "git pull --ff-only failed; nothing was changed."
+      git -C "$REPO_ROOT_HOST" pull --ff-only --quiet origin main || die "git pull --ff-only failed; nothing was changed."
       echo "Updated. Running the updated update.sh."
       exec "$0" "$WIKI_NAME_ARG" ${original_args[@]+"${original_args[@]}"} --no-git-pull
     fi
   fi
-  main_tag="$(git -C "$REPO_ROOT" show "$main_ref:Dockerfile" | floating_tag_of_dockerfile)" \
+  main_tag="$(git -C "$REPO_ROOT_HOST" show "$main_ref:Dockerfile" | floating_tag_of_dockerfile)" \
     || die "Cannot read MW_VERSION/SMW_VERSION from the Dockerfile on $main_ref"
   # new-wiki.sh's default comes from templates/wiki.env; CI checks that both agree
-  template_tag="$(git -C "$REPO_ROOT" show "$main_ref:templates/wiki.env" | sed -n 's/^WIKI_TAG=//p')"
+  template_tag="$(git -C "$REPO_ROOT_HOST" show "$main_ref:templates/wiki.env" | sed -n 's/^WIKI_TAG=//p')"
   [ "$template_tag" = "$main_tag" ] \
     || echo "WARNING: templates/wiki.env on $main_ref says WIKI_TAG=$template_tag; the Dockerfile publishes $main_tag (used)." >&2
 }
