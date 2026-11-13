@@ -5,7 +5,7 @@ FROM mediawiki:${MW_VERSION}
 
 ARG MW_VERSION
 # renovate: datasource=packagist depName=mediawiki/semantic-media-wiki
-ARG SMW_VERSION=7.4.0
+ARG SMW_VERSION=7.4.1
 # renovate: datasource=packagist depName=mediawiki/semantic-result-formats
 ARG SRF_VERSION=6.0.1
 # Git extensions, pinned by commit. PageForms follows its release tags: REL1_46 (6.0.5) still calls
